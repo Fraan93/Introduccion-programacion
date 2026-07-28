@@ -10,13 +10,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.fraan.kroma.data.model.Wallpaper
 import com.fraan.kroma.data.model.WallpaperSource
 import com.fraan.kroma.data.remote.FirebaseWallpaperSource
-import com.fraan.kroma.data.remote.PexelsApi
+import com.fraan.kroma.data.remote.PollinationsApi
 import com.fraan.kroma.data.remote.RedditWallpaperApi
-import com.fraan.kroma.data.remote.UnsplashApi
 import com.fraan.kroma.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -57,57 +54,39 @@ class WallpaperRepository(
         raw?.let { runCatching { json.decodeFromString<List<Wallpaper>>(it) }.getOrDefault(emptyList()) }
             ?: emptyList()
 
-    // ---- Browse (remote catalog) ----
+    // ---- Browse ----
 
     /**
-     * Fetches page [page] (1-based) of wallpapers for [query] (empty = popular),
-     * merging up to THREE catalogs in parallel — Wallhaven (no key needed) plus
-     * Pexels and Unsplash (when their keys are configured AND [useStock] is true;
-     * stock-photo sites pollute categories like Anime or AMOLED, so those
-     * categories use Wallhaven only). Results are interleaved and filtered.
-     *
-     * @param whCategories wallhaven category bits ("111" all, "010" anime only)
+     * Wallhaven page for [query]. Used only as a last-ditch fallback now that Reddit
+     * and the AI generator are the primary sources (stock photo sites were dropped —
+     * they polluted the feed with random photos instead of wallpapers).
      */
     suspend fun browse(
         query: String,
         page: Int,
         atleast: String = "1080x1920",
         whCategories: String = "111",
-        useStock: Boolean = true,
+        useStock: Boolean = true, // kept for source compatibility; stock is no longer used
         whSorting: String? = null
     ): List<Wallpaper> {
-        val minW = atleast.substringBefore('x').toIntOrNull() ?: 1080
-        val minH = atleast.substringAfter('x').toIntOrNull() ?: 1920
-
-        fun List<Wallpaper>.bigEnough() = filter { wp ->
-            val w = wp.resolution.substringBefore('x').toIntOrNull() ?: 0
-            val h = wp.resolution.substringAfter('x').toIntOrNull() ?: 0
-            w >= minW && h >= minH
-        }
-
-        val merged = coroutineScope {
-            val wallhaven = async {
-                runCatching {
-                    WallhavenApi.search(query, page, atleast, whCategories, whSorting)
-                }.getOrDefault(emptyList())
-            }
-            val pexels = async {
-                if (useStock) runCatching { PexelsApi.search(query, page) }.getOrDefault(emptyList()) else emptyList()
-            }
-            val unsplash = async {
-                if (useStock) runCatching { UnsplashApi.search(query, page) }.getOrDefault(emptyList()) else emptyList()
-            }
-            interleave(wallhaven.await(), pexels.await().bigEnough(), unsplash.await().bigEnough())
-        }
-
+        val results = runCatching {
+            WallhavenApi.search(query, page, atleast, whCategories, whSorting)
+        }.getOrDefault(emptyList())
         return when {
-            merged.isNotEmpty() -> merged
-            // Offline fallback only for the broad Popular feed: sparse curated
-            // categories must show a clean empty state, not placeholder photos.
+            results.isNotEmpty() -> results
             page == 1 && query.isBlank() && atleast == "1080x1920" -> SampleData.wallpapers
             else -> emptyList()
         }
     }
+
+    /** A page of AI-generated wallpapers at the requested resolution (infinite). */
+    fun browseAi(
+        prompts: List<String>,
+        page: Int,
+        width: Int,
+        height: Int,
+        category: String
+    ): List<Wallpaper> = PollinationsApi.generate(prompts, page, width, height, category)
 
     /**
      * Fetches a page of curated phone wallpapers from Reddit, keeping only images

@@ -33,8 +33,47 @@ data class Category(
     /** Reddit subreddits ('+'-joined) — primary source for the Wallcraft look. */
     val subreddits: String = "",
     val redditSort: String = "top",
-    val redditTime: String = "all"
+    val redditTime: String = "all",
+    /** AI-generation prompts. Used as the category's source when there are no
+     *  subreddits, or as the fallback when Reddit is unreachable. */
+    val aiPrompts: List<String> = emptyList(),
+    val aiWidth: Int = 2160,
+    val aiHeight: Int = 3840
 )
+
+/** Prompt pools for the AI generator (pollinations.ai). */
+private object AiPrompts {
+    val art = listOf(
+        "cosmic nebula galaxy with bright stars",
+        "a lush green planet seen from space, blue atmosphere",
+        "fantasy mountain landscape at sunset, epic clouds",
+        "aurora borealis over snowy mountains at night",
+        "cyberpunk neon city street at night, rain reflections",
+        "deep space scene with a ringed planet and moons",
+        "bioluminescent forest at night, glowing plants",
+        "japanese torii gate, cherry blossoms, night, lanterns",
+        "underwater coral reef with sun rays, vibrant colors",
+        "abstract flowing liquid gradient, purple and blue",
+        "volcanic dark landscape with glowing lava rivers",
+        "surreal floating islands with waterfalls, dreamy sky",
+        "minimalist 3d geometric shapes, soft studio lighting",
+        "majestic waterfall in a tropical canyon, mist",
+        "galaxy reflected in a calm mountain lake at night"
+    )
+    val anime = listOf(
+        "anime scenery, makoto shinkai style, city at dusk, detailed",
+        "anime landscape, cherry blossoms and mountains, studio ghibli style",
+        "anime night sky with shooting stars over a quiet town",
+        "anime girl with umbrella in neon rainy street, cinematic",
+        "fantasy anime castle in the clouds, golden light"
+    )
+    val amoled = listOf(
+        "pure black background with a single glowing neon wave, amoled",
+        "pure black background minimal glowing geometric line art",
+        "black background with a small vibrant galaxy, amoled minimal",
+        "pure black wallpaper, subtle blue glowing particles"
+    )
+}
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -77,60 +116,62 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     // Categories with `subreddits` pull curated phone wallpapers from Reddit (the
     // Wallcraft look); `query`/`whCategories` act as a Wallhaven fallback if Reddit
     // is unreachable. Photography themes stay on Wallhaven + stock.
+    // Sources: Reddit (curated phone wallpapers, the Wallcraft look) is primary;
+    // the AI generator powers 4K/8K/IA and is the fallback if Reddit is unreachable.
+    // Wallhaven remains only as a deep fallback via browse().
     val categories: List<Category> = listOf(
         Category(
             "Popular", "",
             subreddits = "MobileWallpaper+iphonewallpapers+WQHD_Wallpaper",
-            redditSort = "hot"
+            redditSort = "hot",
+            aiPrompts = AiPrompts.art
         ),
-        // 8K: real ultra-res from Wallhaven, best of all time, no studio portraits.
-        Category("8K", "", atleast = "4320x7680", whCategories = "110", whSorting = "favorites"),
-        // 4K: curated concept art (planets, space, fantasy…) rotating each visit.
-        Category(
-            "4K", "",
-            atleast = "2160x3840",
-            whCategories = "100",
-            useStock = false,
-            whSorting = "favorites",
-            queryPool = listOf(
-                "space", "planet", "galaxy", "nebula", "earth",
-                "fantasy landscape", "digital art", "mountains",
-                "aurora", "cyberpunk city", "abstract 3d", "underwater"
-            )
-        ),
+        // 4K & 8K: AI-generated at true 4K/8K portrait resolution — always stunning,
+        // never random stock photos.
+        Category("4K", "", aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840),
+        Category("8K", "", aiPrompts = AiPrompts.art, aiWidth = 4320, aiHeight = 7680),
+        Category("IA", "", aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840),
         Category(
             "Anime", "anime",
-            whCategories = "010", useStock = false,
-            subreddits = "Animewallpaper+AnimeWallpaper+MobileWallpaper"
+            whCategories = "010",
+            subreddits = "Animewallpaper+AnimeWallpaper+MobileWallpaper",
+            aiPrompts = AiPrompts.anime
         ),
         Category(
-            "AMOLED", "amoled black", useStock = false,
-            subreddits = "Amoledbackgrounds"
+            "AMOLED", "amoled black",
+            subreddits = "Amoledbackgrounds",
+            aiPrompts = AiPrompts.amoled
         ),
         Category(
-            "Minimalista", "minimal", useStock = false,
-            subreddits = "MinimalWallpaper+minimalist"
+            "Minimalista", "minimal",
+            subreddits = "MinimalWallpaper+minimalist",
+            aiPrompts = AiPrompts.art
         ),
         Category(
             "Coches", "car",
-            subreddits = "carwallpapers+CarsWallpapers"
+            subreddits = "carwallpapers+CarsWallpapers",
+            aiPrompts = listOf("a sleek sports car on a night city street, cinematic")
         ),
         Category(
             "Espacio", "space",
-            subreddits = "spaceporn+SpaceWallpapers"
+            subreddits = "spaceporn+SpaceWallpapers",
+            aiPrompts = AiPrompts.art
         ),
-        Category("Oscuro", "dark", useStock = false),
-        Category("Ciudad", "city"),
-        Category("Naturaleza", "nature"),
-        Category("Abstracto", "abstract"),
-        Category("Animales", "animal"),
-        Category("Videojuegos", "video game", useStock = false),
-        Category("Arte", "digital art", useStock = false),
-        Category("Neón", "neon"),
-        Category("Montañas", "mountain"),
-        Category("Flores", "flower"),
-        Category("Paisaje", "landscape"),
-        Category("Fantasía", "fantasy", useStock = false)
+        Category(
+            "Naturaleza", "nature",
+            subreddits = "EarthPorn+BackgroundArt",
+            aiPrompts = AiPrompts.art
+        ),
+        Category(
+            "Ciudad", "city",
+            subreddits = "CityPorn",
+            aiPrompts = listOf("futuristic city skyline at night, neon lights")
+        ),
+        Category(
+            "Fantasía", "fantasy",
+            subreddits = "ImaginaryLandscapes+ImaginaryWorlds",
+            aiPrompts = AiPrompts.art
+        )
     )
 
     // ---- Browse feed with infinite pagination ----
@@ -218,13 +259,18 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         _related.value = emptyList()
         viewModelScope.launch {
             val results = runCatching {
-                // Reddit items: pull more from the SAME subreddits (same theme).
-                if (wallpaper.id.startsWith("rd_") && current.subreddits.isNotBlank()) {
-                    repo.browseReddit(
-                        current.subreddits, "top", "all", null, current.atleast, current.label
-                    ).items
-                } else {
-                    repo.findSimilar(wallpaper)
+                when {
+                    // Reddit items: more from the SAME subreddits (same theme).
+                    wallpaper.id.startsWith("rd_") && current.subreddits.isNotBlank() ->
+                        repo.browseReddit(
+                            current.subreddits, "top", "all", null, current.atleast, current.label
+                        ).items
+                    // AI items: more freshly generated art in the same style.
+                    wallpaper.id.startsWith("ai_") -> {
+                        val prompts = current.aiPrompts.ifEmpty { AiPrompts.art }
+                        repo.browseAi(prompts, Random.nextInt(0, 60), current.aiWidth, current.aiHeight, current.label)
+                    }
+                    else -> repo.findSimilar(wallpaper)
                 }
             }.getOrDefault(emptyList())
                 .filter { it.id != wallpaper.id }
@@ -238,31 +284,42 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         if (_loading.value || endReached) return
         _loading.value = true
         viewModelScope.launch {
-            if (redditActive) {
-                val res = runCatching {
-                    repo.browseReddit(
-                        current.subreddits, current.redditSort, current.redditTime,
-                        redditAfter, current.atleast, current.label
-                    )
-                }.getOrNull()
-                // Reddit unreachable / empty on the first page -> fall back to Wallhaven.
-                if (res == null || (redditAfter == null && res.items.isEmpty())) {
-                    redditActive = false
-                    _loading.value = false
-                    loadMore()
-                    return@launch
+            when {
+                redditActive -> {
+                    val res = runCatching {
+                        repo.browseReddit(
+                            current.subreddits, current.redditSort, current.redditTime,
+                            redditAfter, current.atleast, current.label
+                        )
+                    }.getOrNull()
+                    // Reddit unreachable / empty first page -> switch to AI (or Wallhaven).
+                    if (res == null || (redditAfter == null && res.items.isEmpty())) {
+                        redditActive = false
+                        _loading.value = false
+                        loadMore()
+                        return@launch
+                    }
+                    redditAfter = res.nextAfter
+                    if (res.nextAfter == null) endReached = true
+                    appendItems(res.items)
                 }
-                redditAfter = res.nextAfter
-                if (res.nextAfter == null) endReached = true
-                appendItems(res.items)
-            } else {
-                val items = runCatching {
-                    repo.browse(
-                        current.query, page + pageOffset, current.atleast,
-                        current.whCategories, current.useStock, current.whSorting
+                current.aiPrompts.isNotEmpty() -> {
+                    val items = repo.browseAi(
+                        current.aiPrompts, page, current.aiWidth, current.aiHeight, current.label
                     )
-                }.getOrDefault(emptyList())
-                if (items.isEmpty()) endReached = true else { appendItems(items); page++ }
+                    appendItems(items)
+                    page++
+                    if (page > 40) endReached = true // safety cap; AI is otherwise endless
+                }
+                else -> {
+                    val items = runCatching {
+                        repo.browse(
+                            current.query, page + pageOffset, current.atleast,
+                            current.whCategories, current.useStock, current.whSorting
+                        )
+                    }.getOrDefault(emptyList())
+                    if (items.isEmpty()) endReached = true else { appendItems(items); page++ }
+                }
             }
             _loading.value = false
         }
