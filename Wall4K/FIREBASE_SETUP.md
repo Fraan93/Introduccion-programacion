@@ -18,7 +18,7 @@ las mismas**. Es gratis para empezar (plan Spark) y tarda unos 10 minutos.
 2. **Nombre del paquete de Android:** escribe exactamente:
 
    ```
-   com.wallcraft4k.app
+   com.fraan.kroma
    ```
 
 3. Registra la app y **descarga `google-services.json`**.

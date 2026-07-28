@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Wall4K"
+rootProject.name = "Kroma"
 include(":app")

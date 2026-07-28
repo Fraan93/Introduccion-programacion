@@ -2,6 +2,6 @@
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
 -keepclassmembers class **$$serializer { *; }
--keepclasseswithmembers class com.wallcraft4k.app.data.** {
+-keepclasseswithmembers class com.fraan.kroma.data.** {
     kotlinx.serialization.KSerializer serializer(...);
 }

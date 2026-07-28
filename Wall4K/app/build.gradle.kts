@@ -12,15 +12,15 @@ if (project.file("google-services.json").exists()) {
 }
 
 android {
-    namespace = "com.wallcraft4k.app"
+    namespace = "com.fraan.kroma"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.wallcraft4k.app"
+        applicationId = "com.fraan.kroma"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
         vectorDrawables { useSupportLibrary = true }
 
         // API keys for the extra catalogs. Provided via environment variables
