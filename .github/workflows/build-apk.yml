@@ -75,9 +75,9 @@ jobs:
           retention-days: 30
 
       # Release fija con enlace de descarga directo. Se actualiza en cada push
-      # a la rama (el runner crea el tag "debug-latest" con el token de Actions).
+      # a la rama y también en lanzamientos manuales (Run workflow).
       - name: Publicar/actualizar Release de descarga
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: debug-latest
