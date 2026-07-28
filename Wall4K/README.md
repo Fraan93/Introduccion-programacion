@@ -52,6 +52,23 @@ cd Wall4K
 > Crea un `local.properties` con la ruta de tu SDK, por ejemplo:
 > `sdk.dir=/Users/tu-usuario/Library/Android/sdk`
 
+### ☁️ Descargar el APK sin instalar nada (GitHub Actions)
+
+El repo incluye un workflow que **compila el APK en la nube** automáticamente.
+
+1. En GitHub, ve a la pestaña **Actions** → workflow **“Compilar APK (Wall4K)”**.
+2. Se ejecuta solo en cada push; también puedes lanzarlo a mano con **Run workflow**.
+3. Cuando termine (✓ verde), abre la ejecución y descarga el artifact
+   **`Wall4K-debug-apk`** (dentro va `Wall4K-debug.apk`).
+4. Pásalo a tu teléfono Android e instálalo (activa “instalar apps de orígenes
+   desconocidos”). Es un APK **debug**, ideal para probar.
+
+> ¿Quieres una **Release** descargable con enlace fijo? Crea un tag que empiece
+> por `v` (por ejemplo `v1.0`) y el workflow publicará el APK en *Releases*:
+> ```bash
+> git tag v1.0 && git push origin v1.0
+> ```
+
 ## 🔌 Subidas compartidas con Firebase (ya integrado)
 
 La app trae **Firebase (Cloud Storage + Firestore)** integrado para que las
