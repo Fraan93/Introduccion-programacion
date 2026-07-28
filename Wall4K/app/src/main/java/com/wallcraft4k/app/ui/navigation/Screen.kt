@@ -11,6 +11,8 @@ sealed class Screen(val route: String) {
     data object Detail : Screen("detail/{id}") {
         fun createRoute(id: String) = "detail/$id"
     }
+
+    data object Paywall : Screen("paywall")
 }
 
 enum class TopLevelDestination(

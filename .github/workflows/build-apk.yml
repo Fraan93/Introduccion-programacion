@@ -48,6 +48,11 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Compilar APK de debug
+        env:
+          # Claves opcionales de catálogos extra. Configúralas en:
+          # Settings -> Secrets and variables -> Actions -> New repository secret
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
         run: |
           set -o pipefail
           ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tee /tmp/build.log

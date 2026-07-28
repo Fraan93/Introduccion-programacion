@@ -19,9 +19,19 @@ android {
         applicationId = "com.wallcraft4k.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
         vectorDrawables { useSupportLibrary = true }
+
+        // API keys for the extra catalogs. Provided via environment variables
+        // (GitHub Secrets in CI) or -PPEXELS_API_KEY=... Gradle properties.
+        // With empty keys the app still works using the Wallhaven catalog only.
+        val pexelsKey = System.getenv("PEXELS_API_KEY")
+            ?: (project.findProperty("PEXELS_API_KEY") as? String ?: "")
+        val unsplashKey = System.getenv("UNSPLASH_ACCESS_KEY")
+            ?: (project.findProperty("UNSPLASH_ACCESS_KEY") as? String ?: "")
+        buildConfigField("String", "PEXELS_API_KEY", "\"$pexelsKey\"")
+        buildConfigField("String", "UNSPLASH_ACCESS_KEY", "\"$unsplashKey\"")
     }
 
     buildTypes {
@@ -42,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

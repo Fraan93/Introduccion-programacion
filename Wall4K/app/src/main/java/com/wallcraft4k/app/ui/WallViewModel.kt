@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wallcraft4k.app.Wall4KApp
+import com.wallcraft4k.app.data.PremiumPlan
 import com.wallcraft4k.app.data.model.Wallpaper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,9 +23,25 @@ data class Category(
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repo = (app as Wall4KApp).repository
+    private val wall4kApp = app as Wall4KApp
+    private val repo = wall4kApp.repository
+    private val premiumRepo = wall4kApp.premiumRepository
 
     val isRemote: Boolean = repo.isRemote
+
+    // ---- Premium ----
+    val isPremium: StateFlow<Boolean> =
+        premiumRepo.isPremium.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val activePlan: StateFlow<PremiumPlan?> =
+        premiumRepo.activePlan.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun activatePremium(plan: PremiumPlan, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            premiumRepo.activate(plan)
+            onDone()
+        }
+    }
 
     val categories: List<Category> = listOf(
         Category("Popular", ""),

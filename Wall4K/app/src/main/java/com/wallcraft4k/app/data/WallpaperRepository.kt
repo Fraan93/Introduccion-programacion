@@ -10,8 +10,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.wallcraft4k.app.data.model.Wallpaper
 import com.wallcraft4k.app.data.model.WallpaperSource
 import com.wallcraft4k.app.data.remote.FirebaseWallpaperSource
+import com.wallcraft4k.app.data.remote.PexelsApi
+import com.wallcraft4k.app.data.remote.UnsplashApi
 import com.wallcraft4k.app.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -54,14 +58,51 @@ class WallpaperRepository(
 
     // ---- Browse (remote catalog) ----
 
-    /** Fetches page [page] (1-based) of wallpapers for [query] (empty = popular). */
+    /**
+     * Fetches page [page] (1-based) of wallpapers for [query] (empty = popular),
+     * merging THREE catalogs in parallel — Wallhaven (no key needed) plus Pexels
+     * and Unsplash (when their free API keys are configured). Results are
+     * interleaved so the feed mixes all sources, and filtered to [atleast].
+     */
     suspend fun browse(query: String, page: Int, atleast: String = "1080x1920"): List<Wallpaper> {
-        val results = WallhavenApi.search(query, page, atleast)
+        val minW = atleast.substringBefore('x').toIntOrNull() ?: 1080
+        val minH = atleast.substringAfter('x').toIntOrNull() ?: 1920
+
+        fun List<Wallpaper>.bigEnough() = filter { wp ->
+            val w = wp.resolution.substringBefore('x').toIntOrNull() ?: 0
+            val h = wp.resolution.substringAfter('x').toIntOrNull() ?: 0
+            w >= minW && h >= minH
+        }
+
+        val merged = coroutineScope {
+            val wallhaven = async { runCatching { WallhavenApi.search(query, page, atleast) }.getOrDefault(emptyList()) }
+            val pexels = async { runCatching { PexelsApi.search(query, page) }.getOrDefault(emptyList()) }
+            val unsplash = async { runCatching { UnsplashApi.search(query, page) }.getOrDefault(emptyList()) }
+            interleave(wallhaven.await(), pexels.await().bigEnough(), unsplash.await().bigEnough())
+        }
+
         return when {
-            results.isNotEmpty() -> results
+            merged.isNotEmpty() -> merged
             page == 1 -> SampleData.wallpapers // offline fallback
             else -> emptyList()
         }
+    }
+
+    /** Round-robin merge so the feed alternates between sources. */
+    private fun interleave(vararg lists: List<Wallpaper>): List<Wallpaper> {
+        val result = ArrayList<Wallpaper>(lists.sumOf { it.size })
+        val iterators = lists.map { it.iterator() }
+        var added = true
+        while (added) {
+            added = false
+            for (it in iterators) {
+                if (it.hasNext()) {
+                    result += it.next()
+                    added = true
+                }
+            }
+        }
+        return result
     }
 
     // ---- Favourites ----

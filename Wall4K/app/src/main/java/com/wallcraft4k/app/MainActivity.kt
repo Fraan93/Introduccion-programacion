@@ -22,7 +22,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import com.wallcraft4k.app.data.model.WallpaperSource
+import com.wallcraft4k.app.ui.Category
 import com.wallcraft4k.app.ui.WallViewModel
 import com.wallcraft4k.app.ui.navigation.Screen
 import com.wallcraft4k.app.ui.navigation.TopLevelDestination
@@ -30,6 +33,7 @@ import com.wallcraft4k.app.ui.screens.CategoriesScreen
 import com.wallcraft4k.app.ui.screens.DetailScreen
 import com.wallcraft4k.app.ui.screens.FavoritesScreen
 import com.wallcraft4k.app.ui.screens.HomeScreen
+import com.wallcraft4k.app.ui.screens.PaywallScreen
 import com.wallcraft4k.app.ui.screens.UploadScreen
 import com.wallcraft4k.app.ui.theme.Wall4KTheme
 
@@ -49,6 +53,7 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val navController = rememberNavController()
     val vm: WallViewModel = viewModel()
+    val context = LocalContext.current
 
     val browse by vm.browse.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -57,6 +62,17 @@ private fun AppRoot() {
     val favoriteList by vm.favoriteWallpapers.collectAsState()
     val uploads by vm.uploads.collectAsState()
     val uploading by vm.uploading.collectAsState()
+    val isPremium by vm.isPremium.collectAsState()
+    val activePlan by vm.activePlan.collectAsState()
+
+    // 8K is a PRO category: non-premium taps open the paywall instead.
+    fun pickCategory(category: Category) {
+        if (category.label == "8K" && !isPremium) {
+            navController.navigate(Screen.Paywall.route)
+        } else {
+            vm.selectCategory(category)
+        }
+    }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -105,24 +121,46 @@ private fun AppRoot() {
                     wallpapers = displayed,
                     favorites = favoriteIds,
                     loading = loading,
-                    onSelectCategory = { vm.selectCategory(it) },
+                    isPremium = isPremium,
+                    onSelectCategory = { pickCategory(it) },
                     onSearch = { vm.search(it) },
                     onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
                     onToggleFavorite = { vm.toggleFavorite(it) },
-                    onLoadMore = { vm.loadMore() }
+                    onLoadMore = { vm.loadMore() },
+                    onOpenPremium = { navController.navigate(Screen.Paywall.route) }
                 )
             }
             composable(TopLevelDestination.CATEGORIES.route) {
                 CategoriesScreen(
                     categories = vm.categories,
                     onPick = { category ->
-                        vm.selectCategory(category)
-                        navController.navigate(TopLevelDestination.HOME.route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
+                        if (category.label == "8K" && !isPremium) {
+                            navController.navigate(Screen.Paywall.route)
+                        } else {
+                            vm.selectCategory(category)
+                            navController.navigate(TopLevelDestination.HOME.route) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     }
+                )
+            }
+            composable(Screen.Paywall.route) {
+                PaywallScreen(
+                    isPremium = isPremium,
+                    activePlan = activePlan,
+                    onActivate = { plan ->
+                        vm.activatePremium(plan) {
+                            Toast.makeText(
+                                context,
+                                "¡PRO activado (${plan.title})! Compra simulada — sin cargo real.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(TopLevelDestination.UPLOAD.route) {

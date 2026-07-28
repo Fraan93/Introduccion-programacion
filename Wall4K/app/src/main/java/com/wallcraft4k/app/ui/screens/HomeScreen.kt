@@ -11,7 +11,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -20,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,11 +48,13 @@ fun HomeScreen(
     wallpapers: List<Wallpaper>,
     favorites: Set<String>,
     loading: Boolean,
+    isPremium: Boolean,
     onSelectCategory: (Category) -> Unit,
     onSearch: (String) -> Unit,
     onOpen: (Wallpaper) -> Unit,
     onToggleFavorite: (Wallpaper) -> Unit,
     onLoadMore: () -> Unit,
+    onOpenPremium: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var query by remember { mutableStateOf("") }
@@ -54,7 +62,9 @@ fun HomeScreen(
     Column(modifier.fillMaxSize()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 18.dp)
         ) {
             Text(
                 text = "Wall",
@@ -68,6 +78,35 @@ fun HomeScreen(
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary
             )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            // PRO pill
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (isPremium) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                modifier = Modifier.clickable(onClick = onOpenPremium)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = if (isPremium) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "PRO",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isPremium) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            }
         }
         Text(
             text = "Miles de fondos 4K y 8K",
@@ -100,10 +139,20 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             items(categories) { cat ->
+                val locked = cat.label == "8K" && !isPremium
                 FilterChip(
-                    selected = selected.query == cat.query,
+                    selected = selected == cat,
                     onClick = { onSelectCategory(cat) },
                     label = { Text(cat.label) },
+                    trailingIcon = if (locked) {
+                        {
+                            Icon(
+                                Icons.Filled.Lock,
+                                contentDescription = "Requiere PRO",
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    } else null,
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary
