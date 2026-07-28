@@ -69,7 +69,19 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publicar Release (solo en tags v*)
+      # Release fija con enlace de descarga directo. Se actualiza en cada push
+      # a la rama (el runner crea el tag "debug-latest" con el token de Actions).
+      - name: Publicar/actualizar Release de descarga
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-latest
+          name: "Wall4K - APK debug (más reciente)"
+          prerelease: true
+          files: Wall4K/Wall4K-debug.apk
+
+      # Además, Release versionada cuando publiques un tag v*.
+      - name: Publicar Release versionada (tags v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
