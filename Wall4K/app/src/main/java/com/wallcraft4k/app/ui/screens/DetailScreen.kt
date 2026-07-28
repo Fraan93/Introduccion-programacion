@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ThreeDRotation
+import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -159,7 +159,7 @@ fun DetailScreen(
                 ActionButton(Icons.Filled.Wallpaper, "Aplicar", primary = true, modifier = Modifier.weight(1f)) {
                     if (!busy) showWallpaperDialog = true
                 }
-                ActionButton(Icons.Filled.ThreeDRotation, "Parallax", modifier = Modifier.weight(1f)) {
+                ActionButton(Icons.Filled.Animation, "Parallax", modifier = Modifier.weight(1f)) {
                     if (busy) return@ActionButton
                     busy = true
                     scope.launch {
