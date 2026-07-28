@@ -13,8 +13,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** A browsable category mapped to a wallhaven search query. */
-data class Category(val label: String, val query: String)
+/** A browsable category mapped to a wallhaven search query + minimum resolution. */
+data class Category(
+    val label: String,
+    val query: String,
+    val atleast: String = "1920x1080"
+)
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -24,21 +28,25 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     val categories: List<Category> = listOf(
         Category("Popular", ""),
-        Category("4K / 8K", "4k"),
+        Category("8K", "", atleast = "7680x4320"),      // 8K por separado
+        Category("4K", "", atleast = "3840x2160"),      // 4K por separado
         Category("Anime", "anime"),
-        Category("Naturaleza", "nature landscape"),
+        Category("AMOLED", "amoled"),
+        Category("Oscuro", "dark"),
         Category("Coches", "car"),
         Category("Ciudad", "city"),
+        Category("Naturaleza", "nature"),
+        Category("Espacio", "space"),
         Category("Abstracto", "abstract"),
-        Category("Espacio", "space galaxy"),
-        Category("Oscuro / AMOLED", "dark amoled"),
         Category("Minimalista", "minimal"),
         Category("Animales", "animal"),
         Category("Videojuegos", "video game"),
         Category("Arte", "digital art"),
         Category("Neón", "neon"),
-        Category("Montañas", "mountains"),
-        Category("Flores", "flowers")
+        Category("Montañas", "mountain"),
+        Category("Flores", "flower"),
+        Category("Paisaje", "landscape"),
+        Category("Fantasía", "fantasy")
     )
 
     // ---- Browse feed with infinite pagination ----
@@ -52,6 +60,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     val selectedCategory: StateFlow<Category> = _selectedCategory.asStateFlow()
 
     private var currentQuery = ""
+    private var currentAtleast = "1920x1080"
     private var page = 1
     private var endReached = false
 
@@ -74,27 +83,32 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(category: Category) {
         _selectedCategory.value = category
-        startQuery(category.query)
+        startQuery(category.query, category.atleast)
     }
 
     fun search(text: String) {
         _selectedCategory.value = Category(text.ifBlank { "Búsqueda" }, text)
-        startQuery(text)
+        startQuery(text, "1920x1080")
     }
 
-    private fun startQuery(query: String) {
+    private fun startQuery(query: String, atleast: String) {
         currentQuery = query
+        currentAtleast = atleast
         page = 1
         endReached = false
         _browse.value = emptyList()
         loadMore()
     }
 
+    /** Other wallpapers of the same category as [wallpaper], for the "more like this" strip. */
+    fun relatedTo(wallpaper: Wallpaper): List<Wallpaper> =
+        _browse.value.filter { it.id != wallpaper.id && it.category == wallpaper.category }.take(15)
+
     fun loadMore() {
         if (_loading.value || endReached) return
         _loading.value = true
         viewModelScope.launch {
-            val items = runCatching { repo.browse(currentQuery, page) }.getOrDefault(emptyList())
+            val items = runCatching { repo.browse(currentQuery, page, currentAtleast) }.getOrDefault(emptyList())
             if (items.isEmpty()) {
                 endReached = true
             } else {

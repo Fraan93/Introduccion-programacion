@@ -1,16 +1,20 @@
 package com.wallcraft4k.app.util
 
 import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.provider.MediaStore
 import androidx.core.graphics.drawable.toBitmapOrNull
 import coil.ImageLoader
 import coil.request.ImageRequest
+import com.wallcraft4k.app.parallax.ParallaxWallpaperService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /** Which surface to apply the wallpaper to. */
 enum class WallpaperTarget { HOME, LOCK, BOTH }
@@ -51,6 +55,31 @@ object WallpaperActions {
             }
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * Prepares [model] as the parallax live wallpaper (saves it to disk + prefs) and
+     * opens the system live-wallpaper preview so the user can confirm.
+     * Returns true if the preview was launched.
+     */
+    suspend fun setParallaxWallpaper(context: Context, model: String): Boolean {
+        val bitmap = loadBitmap(context, model) ?: return false
+        withContext(Dispatchers.IO) {
+            val file = File(context.filesDir, "parallax.jpg")
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+            context.getSharedPreferences(ParallaxWallpaperService.PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(ParallaxWallpaperService.KEY_PATH, file.absolutePath)
+                .apply()
+        }
+        val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+            putExtra(
+                WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                ComponentName(context, ParallaxWallpaperService::class.java)
+            )
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching { context.startActivity(intent); true }.getOrDefault(false)
     }
 
     /** Saves [model] into the public gallery under Pictures/Wall4K. Returns true on success. */

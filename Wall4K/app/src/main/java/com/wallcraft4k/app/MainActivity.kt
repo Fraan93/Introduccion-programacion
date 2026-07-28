@@ -152,8 +152,10 @@ private fun AppRoot() {
                     DetailScreen(
                         wallpaper = wp,
                         isFavorite = wp.id in favoriteIds,
+                        related = vm.relatedTo(wp),
                         onBack = { navController.popBackStack() },
                         onToggleFavorite = { vm.toggleFavorite(wp) },
+                        onOpenRelated = { navController.navigate(Screen.Detail.createRoute(it.id)) },
                         onDelete = if (wp.source == WallpaperSource.UPLOAD && !vm.isRemote) {
                             { vm.deleteUpload(wp.id) }
                         } else null

@@ -30,20 +30,28 @@ object WallhavenApi {
     private const val BASE = "https://wallhaven.cc/api/v1/search"
 
     /**
-     * @param query search terms (empty = top list of everything)
-     * @param page  1-based page index (wallhaven returns 24 per page)
+     * @param query   search terms (empty = top list of everything)
+     * @param page    1-based page index (wallhaven returns 24 per page)
+     * @param atleast minimum resolution "WxH" (e.g. 3840x2160 for 4K, 7680x4320 for 8K)
      */
-    suspend fun search(query: String, page: Int): List<Wallpaper> = withContext(Dispatchers.IO) {
+    suspend fun search(
+        query: String,
+        page: Int,
+        atleast: String = "1920x1080"
+    ): List<Wallpaper> = withContext(Dispatchers.IO) {
         runCatching {
             val q = URLEncoder.encode(query, "UTF-8")
-            // categories=111 (general+anime+people), purity=100 (SFW only),
-            // at least Full-HD, sorted by top list. Kept broad so results are never empty.
+            // With a query -> relevance (searches the WHOLE catalog, many results).
+            // Without a query -> top list of the last year.
+            val sorting = if (query.isBlank()) "toplist" else "relevance"
             val url = buildString {
                 append(BASE)
                 append("?q=").append(q)
                 append("&categories=111&purity=100")
-                append("&sorting=toplist&order=desc")
-                append("&atleast=1920x1080")
+                append("&sorting=").append(sorting)
+                if (query.isBlank()) append("&topRange=1y")
+                append("&order=desc")
+                append("&atleast=").append(atleast)
                 append("&page=").append(page)
             }
             val request = Request.Builder().url(url).header("User-Agent", "Wall4K/1.0").build()

@@ -55,8 +55,8 @@ class WallpaperRepository(
     // ---- Browse (remote catalog) ----
 
     /** Fetches page [page] (1-based) of wallpapers for [query] (empty = popular). */
-    suspend fun browse(query: String, page: Int): List<Wallpaper> {
-        val results = WallhavenApi.search(query, page)
+    suspend fun browse(query: String, page: Int, atleast: String = "1920x1080"): List<Wallpaper> {
+        val results = WallhavenApi.search(query, page, atleast)
         return when {
             results.isNotEmpty() -> results
             page == 1 -> SampleData.wallpapers // offline fallback
