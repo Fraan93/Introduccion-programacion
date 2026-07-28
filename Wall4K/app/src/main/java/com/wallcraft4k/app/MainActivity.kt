@@ -39,14 +39,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             Wall4KTheme {
-                Wall4KApp()
+                AppRoot()
             }
         }
     }
 }
 
 @Composable
-private fun Wall4KApp() {
+private fun AppRoot() {
     val navController = rememberNavController()
     val vm: WallViewModel = viewModel()
 
