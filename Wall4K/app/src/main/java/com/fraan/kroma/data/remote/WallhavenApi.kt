@@ -30,15 +30,18 @@ object WallhavenApi {
     private const val BASE = "https://wallhaven.cc/api/v1/search"
 
     /**
-     * @param query   search terms (empty = top list of everything)
-     * @param page    1-based page index (wallhaven returns 24 per page)
-     * @param atleast minimum PORTRAIT resolution "WxH"
-     *                (e.g. 2160x3840 for 4K vertical, 4320x7680 for 8K vertical)
+     * @param query      search terms (empty = top list of everything)
+     * @param page       1-based page index (wallhaven returns 24 per page)
+     * @param atleast    minimum PORTRAIT resolution "WxH"
+     *                   (e.g. 2160x3840 for 4K vertical, 4320x7680 for 8K vertical)
+     * @param categories wallhaven category bits general/anime/people
+     *                   ("111" = all, "010" = anime only)
      */
     suspend fun search(
         query: String,
         page: Int,
-        atleast: String = "1080x1920"
+        atleast: String = "1080x1920",
+        categories: String = "111"
     ): List<Wallpaper> = withContext(Dispatchers.IO) {
         runCatching {
             val q = URLEncoder.encode(query, "UTF-8")
@@ -48,7 +51,8 @@ object WallhavenApi {
             val url = buildString {
                 append(BASE)
                 append("?q=").append(q)
-                append("&categories=111&purity=100")
+                append("&categories=").append(categories)
+                append("&purity=100")
                 append("&sorting=").append(sorting)
                 if (query.isBlank()) append("&topRange=1y")
                 append("&order=desc")
@@ -67,7 +71,35 @@ object WallhavenApi {
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * Returns the real tags of a wallpaper (e.g. "anime girls", "sports car"),
+     * used to find genuinely similar wallpapers. [id] is the raw wallhaven id
+     * (without the "wh_" prefix).
+     */
+    suspend fun tags(id: String): List<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("https://wallhaven.cc/api/v1/w/$id")
+                .header("User-Agent", "Kroma/1.0")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val body = response.body?.string() ?: return@withContext emptyList()
+                json.decodeFromString<WhDetailResponse>(body).data.tags.map { it.name }
+            }
+        }.getOrDefault(emptyList())
+    }
+
     // ---- JSON models ----
+
+    @Serializable
+    private data class WhDetailResponse(val data: WhDetail = WhDetail())
+
+    @Serializable
+    private data class WhDetail(val tags: List<WhTag> = emptyList())
+
+    @Serializable
+    private data class WhTag(val name: String = "")
 
     @Serializable
     private data class WhResponse(val data: List<WhItem> = emptyList())

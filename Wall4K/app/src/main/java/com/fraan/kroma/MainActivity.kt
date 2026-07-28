@@ -187,13 +187,22 @@ private fun AppRoot() {
                 if (wp == null) {
                     navController.popBackStack()
                 } else {
+                    val related by vm.related.collectAsState()
+                    // Fetch genuinely similar wallpapers (by the image's real tags).
+                    androidx.compose.runtime.LaunchedEffect(wp.id) { vm.loadRelated(wp) }
                     DetailScreen(
                         wallpaper = wp,
                         isFavorite = wp.id in favoriteIds,
-                        related = vm.relatedTo(wp),
+                        related = related,
                         onBack = { navController.popBackStack() },
                         onToggleFavorite = { vm.toggleFavorite(wp) },
-                        onOpenRelated = { navController.navigate(Screen.Detail.createRoute(it.id)) },
+                        onOpenRelated = { next ->
+                            // REPLACE the current detail instead of stacking: one
+                            // back press always returns to the grid.
+                            navController.navigate(Screen.Detail.createRoute(next.id)) {
+                                popUpTo(Screen.Detail.route) { inclusive = true }
+                            }
+                        },
                         onDelete = if (wp.source == WallpaperSource.UPLOAD && !vm.isRemote) {
                             { vm.deleteUpload(wp.id) }
                         } else null

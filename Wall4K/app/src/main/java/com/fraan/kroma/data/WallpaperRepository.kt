@@ -60,11 +60,20 @@ class WallpaperRepository(
 
     /**
      * Fetches page [page] (1-based) of wallpapers for [query] (empty = popular),
-     * merging THREE catalogs in parallel — Wallhaven (no key needed) plus Pexels
-     * and Unsplash (when their free API keys are configured). Results are
-     * interleaved so the feed mixes all sources, and filtered to [atleast].
+     * merging up to THREE catalogs in parallel — Wallhaven (no key needed) plus
+     * Pexels and Unsplash (when their keys are configured AND [useStock] is true;
+     * stock-photo sites pollute categories like Anime or AMOLED, so those
+     * categories use Wallhaven only). Results are interleaved and filtered.
+     *
+     * @param whCategories wallhaven category bits ("111" all, "010" anime only)
      */
-    suspend fun browse(query: String, page: Int, atleast: String = "1080x1920"): List<Wallpaper> {
+    suspend fun browse(
+        query: String,
+        page: Int,
+        atleast: String = "1080x1920",
+        whCategories: String = "111",
+        useStock: Boolean = true
+    ): List<Wallpaper> {
         val minW = atleast.substringBefore('x').toIntOrNull() ?: 1080
         val minH = atleast.substringAfter('x').toIntOrNull() ?: 1920
 
@@ -75,9 +84,15 @@ class WallpaperRepository(
         }
 
         val merged = coroutineScope {
-            val wallhaven = async { runCatching { WallhavenApi.search(query, page, atleast) }.getOrDefault(emptyList()) }
-            val pexels = async { runCatching { PexelsApi.search(query, page) }.getOrDefault(emptyList()) }
-            val unsplash = async { runCatching { UnsplashApi.search(query, page) }.getOrDefault(emptyList()) }
+            val wallhaven = async {
+                runCatching { WallhavenApi.search(query, page, atleast, whCategories) }.getOrDefault(emptyList())
+            }
+            val pexels = async {
+                if (useStock) runCatching { PexelsApi.search(query, page) }.getOrDefault(emptyList()) else emptyList()
+            }
+            val unsplash = async {
+                if (useStock) runCatching { UnsplashApi.search(query, page) }.getOrDefault(emptyList()) else emptyList()
+            }
             interleave(wallhaven.await(), pexels.await().bigEnough(), unsplash.await().bigEnough())
         }
 
@@ -86,6 +101,27 @@ class WallpaperRepository(
             page == 1 -> SampleData.wallpapers // offline fallback
             else -> emptyList()
         }
+    }
+
+    /**
+     * Finds wallpapers genuinely similar to [wallpaper]:
+     * - Wallhaven items: read the image's REAL tags and search by them
+     *   (e.g. an anime girl returns more anime girls, a sports car more cars).
+     * - Stock items: search by the photo's descriptive title.
+     * - Fallback: the wallpaper's category.
+     */
+    suspend fun findSimilar(wallpaper: Wallpaper): List<Wallpaper> {
+        val query: String = when {
+            wallpaper.id.startsWith("wh_") -> {
+                val tags = WallhavenApi.tags(wallpaper.id.removePrefix("wh_"))
+                tags.firstOrNull() ?: wallpaper.category
+            }
+            wallpaper.title.isNotBlank() && wallpaper.title != "Wallpaper" ->
+                wallpaper.title.split(" ").take(3).joinToString(" ")
+            else -> wallpaper.category
+        }
+        val results = WallhavenApi.search(query, 1)
+        return if (results.isNotEmpty()) results else browse(wallpaper.category, 1)
     }
 
     /** Round-robin merge so the feed alternates between sources. */

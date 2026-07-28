@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -84,17 +83,30 @@ fun DetailScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Top bar
+        // Top bar: back + discreet author credit + optional delete.
         Row(
             modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Volver", onClick = onBack)
             Box(Modifier.weight(1f))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color.Black.copy(alpha = 0.35f)
+            ) {
+                Text(
+                    text = wallpaper.author,
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
             if (onDelete != null) {
-                CircleIconButton(Icons.Filled.Delete, "Eliminar") {
-                    onDelete()
-                    onBack()
+                Box(Modifier.padding(start = 6.dp)) {
+                    CircleIconButton(Icons.Filled.Delete, "Eliminar") {
+                        onDelete()
+                        onBack()
+                    }
                 }
             }
         }
@@ -136,7 +148,7 @@ fun DetailScreen(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "${wallpaper.resolution.ifBlank { "" }}  ·  por ${wallpaper.author}".trim(),
+                text = wallpaper.resolution.ifBlank { " " },
                 color = Color.White.copy(alpha = 0.75f),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 2.dp, bottom = 14.dp)
@@ -159,15 +171,6 @@ fun DetailScreen(
                 ActionButton(Icons.Filled.Wallpaper, "Aplicar", primary = true, modifier = Modifier.weight(1f)) {
                     if (!busy) showWallpaperDialog = true
                 }
-                ActionButton(Icons.Filled.Animation, "Parallax", modifier = Modifier.weight(1f)) {
-                    if (busy) return@ActionButton
-                    busy = true
-                    scope.launch {
-                        val ok = WallpaperActions.setParallaxWallpaper(context, wallpaper.fullUrl)
-                        busy = false
-                        if (!ok) toast(context, "No se pudo preparar el parallax")
-                    }
-                }
                 ActionButton(
                     if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                     "Favorito",
@@ -183,10 +186,10 @@ fun DetailScreen(
                 }
             }
 
-            // "More like this" strip.
+            // Genuinely similar wallpapers (searched by the image's real tags).
             if (related.isNotEmpty()) {
                 Text(
-                    text = "Más como este",
+                    text = "Similares",
                     color = Color.White,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
@@ -242,15 +245,6 @@ fun DetailScreen(
                     TargetRow("Ambas pantallas") {
                         showWallpaperDialog = false
                         applyWallpaper(context, scope, wallpaper, WallpaperTarget.BOTH) { busy = it }
-                    }
-                    TargetRow("Parallax (movimiento)") {
-                        showWallpaperDialog = false
-                        busy = true
-                        scope.launch {
-                            val ok = WallpaperActions.setParallaxWallpaper(context, wallpaper.fullUrl)
-                            busy = false
-                            if (!ok) toast(context, "No se pudo preparar el parallax")
-                        }
                     }
                     TextButton(onClick = { showWallpaperDialog = false }) { Text("Cancelar") }
                 }

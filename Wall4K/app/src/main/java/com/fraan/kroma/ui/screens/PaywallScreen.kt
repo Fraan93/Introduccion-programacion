@@ -117,7 +117,6 @@ fun PaywallScreen(
             // Benefits
             listOf(
                 "Categoría 8K exclusiva",
-                "Fondos parallax ilimitados",
                 "Descargas en máxima calidad",
                 "Sin anuncios (cuando se activen)",
                 "Novedades antes que nadie"

@@ -14,11 +14,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** A browsable category mapped to a wallhaven search query + minimum PORTRAIT resolution. */
+/**
+ * A browsable category. [whCategories] are wallhaven category bits ("010" = anime
+ * only). [useStock] controls whether Pexels/Unsplash join in — stock-photo sites
+ * pollute categories like Anime or AMOLED, so those are Wallhaven-only.
+ */
 data class Category(
     val label: String,
     val query: String,
-    val atleast: String = "1080x1920"
+    val atleast: String = "1080x1920",
+    val whCategories: String = "111",
+    val useStock: Boolean = true
 )
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
@@ -45,11 +51,11 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     val categories: List<Category> = listOf(
         Category("Popular", ""),
-        Category("8K", "", atleast = "4320x7680"),      // 8K vertical por separado
-        Category("4K", "", atleast = "2160x3840"),      // 4K vertical por separado
-        Category("Anime", "anime"),
-        Category("AMOLED", "amoled"),
-        Category("Oscuro", "dark"),
+        Category("8K", "", atleast = "4320x7680"),                          // 8K vertical por separado
+        Category("4K", "", atleast = "2160x3840"),                          // 4K vertical por separado
+        Category("Anime", "", whCategories = "010", useStock = false),      // catálogo anime real
+        Category("AMOLED", "amoled black", useStock = false),
+        Category("Oscuro", "dark", useStock = false),
         Category("Coches", "car"),
         Category("Ciudad", "city"),
         Category("Naturaleza", "nature"),
@@ -57,13 +63,13 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         Category("Abstracto", "abstract"),
         Category("Minimalista", "minimal"),
         Category("Animales", "animal"),
-        Category("Videojuegos", "video game"),
-        Category("Arte", "digital art"),
+        Category("Videojuegos", "video game", useStock = false),
+        Category("Arte", "digital art", useStock = false),
         Category("Neón", "neon"),
         Category("Montañas", "mountain"),
         Category("Flores", "flower"),
         Category("Paisaje", "landscape"),
-        Category("Fantasía", "fantasy")
+        Category("Fantasía", "fantasy", useStock = false)
     )
 
     // ---- Browse feed with infinite pagination ----
@@ -78,6 +84,8 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     private var currentQuery = ""
     private var currentAtleast = "1080x1920"
+    private var currentWhCategories = "111"
+    private var currentUseStock = true
     private var page = 1
     private var endReached = false
 
@@ -100,32 +108,47 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(category: Category) {
         _selectedCategory.value = category
-        startQuery(category.query, category.atleast)
+        startQuery(category.query, category.atleast, category.whCategories, category.useStock)
     }
 
     fun search(text: String) {
         _selectedCategory.value = Category(text.ifBlank { "Búsqueda" }, text)
-        startQuery(text, "1080x1920")
+        startQuery(text, "1080x1920", "111", true)
     }
 
-    private fun startQuery(query: String, atleast: String) {
+    private fun startQuery(query: String, atleast: String, whCategories: String, useStock: Boolean) {
         currentQuery = query
         currentAtleast = atleast
+        currentWhCategories = whCategories
+        currentUseStock = useStock
         page = 1
         endReached = false
         _browse.value = emptyList()
         loadMore()
     }
 
-    /** Other wallpapers of the same category as [wallpaper], for the "more like this" strip. */
-    fun relatedTo(wallpaper: Wallpaper): List<Wallpaper> =
-        _browse.value.filter { it.id != wallpaper.id && it.category == wallpaper.category }.take(15)
+    // ---- Genuinely similar wallpapers (by real image tags) ----
+    private val _related = MutableStateFlow<List<Wallpaper>>(emptyList())
+    val related: StateFlow<List<Wallpaper>> = _related.asStateFlow()
+    private var relatedForId: String? = null
+
+    fun loadRelated(wallpaper: Wallpaper) {
+        if (relatedForId == wallpaper.id) return
+        relatedForId = wallpaper.id
+        _related.value = emptyList()
+        viewModelScope.launch {
+            val results = runCatching { repo.findSimilar(wallpaper) }.getOrDefault(emptyList())
+            _related.value = results.filter { it.id != wallpaper.id }.take(14)
+        }
+    }
 
     fun loadMore() {
         if (_loading.value || endReached) return
         _loading.value = true
         viewModelScope.launch {
-            val items = runCatching { repo.browse(currentQuery, page, currentAtleast) }.getOrDefault(emptyList())
+            val items = runCatching {
+                repo.browse(currentQuery, page, currentAtleast, currentWhCategories, currentUseStock)
+            }.getOrDefault(emptyList())
             if (items.isEmpty()) {
                 endReached = true
             } else {
@@ -139,6 +162,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun wallpaperById(id: String): Wallpaper? =
         _browse.value.firstOrNull { it.id == id }
+            ?: _related.value.firstOrNull { it.id == id }
             ?: favoriteWallpapers.value.firstOrNull { it.id == id }
             ?: uploads.value.firstOrNull { it.id == id }
 
