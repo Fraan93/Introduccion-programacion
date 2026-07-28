@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wallcraft4k.app.data.model.Wallpaper
 import com.wallcraft4k.app.data.model.WallpaperSource
+import com.wallcraft4k.app.data.remote.FirebaseWallpaperSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -23,11 +24,21 @@ import java.util.UUID
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "wall4k")
 
 /**
- * Single source of truth. Combines the built-in [SampleData] catalog with the
- * user's local uploads, and tracks favourites. All persisted state lives in
- * DataStore; uploaded images are copied into the app's private storage.
+ * Single source of truth. Combines the built-in [SampleData] catalog with
+ * community uploads, and tracks favourites.
+ *
+ * Uploads have two modes, chosen automatically:
+ *  - **Remote** (when [remote] != null, i.e. Firebase is configured): uploads are
+ *    stored in Cloud Storage + Firestore and shared with every user.
+ *  - **Local** (fallback): uploads are copied into the app's private storage and
+ *    only visible on this device. Favourites always persist locally via DataStore.
  */
-class WallpaperRepository(private val appContext: Context) {
+class WallpaperRepository(
+    private val appContext: Context,
+    private val remote: FirebaseWallpaperSource? = null
+) {
+
+    val isRemote: Boolean get() = remote != null
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -42,13 +53,15 @@ class WallpaperRepository(private val appContext: Context) {
     val favorites: Flow<Set<String>> =
         appContext.dataStore.data.map { it[favoritesKey] ?: emptySet() }
 
-    /** Wallpapers the user uploaded, newest first. */
-    val uploads: Flow<List<Wallpaper>> =
+    private val localUploads: Flow<List<Wallpaper>> =
         appContext.dataStore.data.map { prefs ->
             prefs[uploadsKey]?.let { raw ->
                 runCatching { json.decodeFromString<List<Wallpaper>>(raw) }.getOrDefault(emptyList())
             } ?: emptyList()
         }
+
+    /** Community uploads, newest first — from Firebase if configured, else local. */
+    val uploads: Flow<List<Wallpaper>> = remote?.communityFeed() ?: localUploads
 
     /** Catalog + uploads, uploads shown first so new content is visible. */
     val allWallpapers: Flow<List<Wallpaper>> =
@@ -69,10 +82,21 @@ class WallpaperRepository(private val appContext: Context) {
     }
 
     /**
-     * Copies [source] into private storage and registers a new upload.
+     * Publishes a new upload. In remote mode it goes to Firebase (shared with
+     * everyone); otherwise it is copied into private storage (this device only).
      * Returns the created [Wallpaper].
      */
     suspend fun addUpload(
+        source: Uri,
+        title: String,
+        author: String,
+        category: String
+    ): Wallpaper {
+        remote?.let { return it.upload(source, title, author, category) }
+        return addLocalUpload(source, title, author, category)
+    }
+
+    private suspend fun addLocalUpload(
         source: Uri,
         title: String,
         author: String,
@@ -104,7 +128,19 @@ class WallpaperRepository(private val appContext: Context) {
         wallpaper
     }
 
-    suspend fun deleteUpload(id: String) = withContext(Dispatchers.IO) {
+    suspend fun deleteUpload(id: String) {
+        remote?.let {
+            it.delete(id)
+            appContext.dataStore.edit { prefs ->
+                val favs = prefs[favoritesKey] ?: emptySet()
+                if (id in favs) prefs[favoritesKey] = favs - id
+            }
+            return
+        }
+        deleteLocalUpload(id)
+    }
+
+    private suspend fun deleteLocalUpload(id: String) = withContext(Dispatchers.IO) {
         File(uploadsDir, "$id.jpg").delete()
         appContext.dataStore.edit { prefs ->
             val existing = prefs[uploadsKey]?.let {

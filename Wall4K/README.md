@@ -52,18 +52,24 @@ cd Wall4K
 > Crea un `local.properties` con la ruta de tu SDK, por ejemplo:
 > `sdk.dir=/Users/tu-usuario/Library/Android/sdk`
 
-## 🔌 Conectar un backend real (opcional)
+## 🔌 Subidas compartidas con Firebase (ya integrado)
 
-Hoy el catálogo es local y las subidas se guardan en el dispositivo. Para que las
-subidas se compartan entre usuarios, sustituye la fuente de datos en
-`WallpaperRepository`:
+La app trae **Firebase (Cloud Storage + Firestore)** integrado para que las
+subidas se **compartan entre todos los usuarios**. Funciona en dos modos, y
+cambia solo:
 
-- **Firebase**: Storage para las imágenes + Firestore para los metadatos.
-- **Supabase**: Storage + tabla `wallpapers`.
-- **REST propia**: `GET /wallpapers`, `POST /wallpapers` (multipart).
+- **Modo compartido** — si añades tu `google-services.json`, las subidas van a la
+  nube y todos ven el mismo feed.
+- **Modo local** (por defecto) — sin ese archivo, la app compila y funciona igual,
+  pero cada subida se queda en el dispositivo.
 
-Solo hay que cambiar `SampleData`/`addUpload` por llamadas de red: el resto de la
-app (UI, favoritos, descarga, aplicar fondo) ya funciona igual.
+👉 Sigue **[`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)** (unos 10 min, gratis) para
+activar el modo compartido.
+
+La lógica de red está aislada en `data/remote/FirebaseWallpaperSource.kt` y se
+enchufa en `WallpaperRepository`; el resto de la app (UI, favoritos, descarga,
+aplicar fondo) es idéntico en ambos modos. Si prefieres otro backend
+(Supabase, REST propia), solo hay que reemplazar esa clase.
 
 ## 📋 Permisos
 

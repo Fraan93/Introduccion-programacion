@@ -54,6 +54,7 @@ private fun Wall4KApp() {
     val favorites by vm.favorites.collectAsState()
     val categories by vm.categories.collectAsState()
     val favoriteList by vm.favoriteWallpapers.collectAsState()
+    val uploading by vm.uploading.collectAsState()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -114,8 +115,10 @@ private fun Wall4KApp() {
             composable(TopLevelDestination.UPLOAD.route) {
                 UploadScreen(
                     categories = categories,
-                    onSubmit = { uri, title, author, category ->
-                        vm.addUpload(uri, title, author, category) { }
+                    isRemote = vm.isRemote,
+                    uploading = uploading,
+                    onSubmit = { uri, title, author, category, onResult ->
+                        vm.addUpload(uri, title, author, category, onResult)
                     }
                 )
             }
@@ -138,7 +141,9 @@ private fun Wall4KApp() {
                         isFavorite = wp.id in favorites,
                         onBack = { navController.popBackStack() },
                         onToggleFavorite = { vm.toggleFavorite(wp.id) },
-                        onDelete = if (wp.source == WallpaperSource.UPLOAD) {
+                        // Delete only for on-device uploads. In shared (Firebase) mode
+                        // ownership isn't tracked yet, so we don't expose delete.
+                        onDelete = if (wp.source == WallpaperSource.UPLOAD && !vm.isRemote) {
                             { vm.deleteUpload(wp.id) }
                         } else null
                     )

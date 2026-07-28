@@ -6,8 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wallcraft4k.app.Wall4KApp
 import com.wallcraft4k.app.data.model.Wallpaper
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -15,6 +17,12 @@ import kotlinx.coroutines.launch
 class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = (app as Wall4KApp).repository
+
+    /** True when uploads are shared via Firebase; false when they stay on-device. */
+    val isRemote: Boolean = repo.isRemote
+
+    private val _uploading = MutableStateFlow(false)
+    val uploading: StateFlow<Boolean> = _uploading.asStateFlow()
 
     val wallpapers: StateFlow<List<Wallpaper>> =
         repo.allWallpapers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -43,11 +51,13 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         title: String,
         author: String,
         category: String,
-        onDone: (Wallpaper) -> Unit
+        onResult: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
-            runCatching { repo.addUpload(source, title, author, category) }
-                .onSuccess(onDone)
+            _uploading.value = true
+            val ok = runCatching { repo.addUpload(source, title, author, category) }.isSuccess
+            _uploading.value = false
+            onResult(ok)
         }
     }
 

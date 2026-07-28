@@ -1,6 +1,7 @@
 package com.wallcraft4k.app.ui.screens
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -43,9 +46,12 @@ import coil.compose.AsyncImage
 @Composable
 fun UploadScreen(
     categories: List<String>,
-    onSubmit: (uri: Uri, title: String, author: String, category: String) -> Unit,
+    isRemote: Boolean,
+    uploading: Boolean,
+    onSubmit: (uri: Uri, title: String, author: String, category: String, onResult: (Boolean) -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var pickedUri by remember { mutableStateOf<Uri?>(null) }
     var title by remember { mutableStateOf("") }
     var author by remember { mutableStateOf("") }
@@ -68,7 +74,11 @@ fun UploadScreen(
             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
         )
         Text(
-            text = "Comparte tu propio fondo de pantalla con la comunidad.",
+            text = if (isRemote) {
+                "Comparte tu fondo con toda la comunidad."
+            } else {
+                "Guarda tu fondo en este dispositivo. (Configura Firebase para compartirlo con todos.)"
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -163,18 +173,33 @@ fun UploadScreen(
         Button(
             onClick = {
                 val uri = pickedUri ?: return@Button
-                onSubmit(uri, title, author, category)
-                pickedUri = null
-                title = ""
-                author = ""
-                category = ""
+                onSubmit(uri, title, author, category) { ok ->
+                    if (ok) {
+                        Toast.makeText(context, "¡Fondo publicado!", Toast.LENGTH_SHORT).show()
+                        pickedUri = null
+                        title = ""
+                        author = ""
+                        category = ""
+                    } else {
+                        Toast.makeText(context, "No se pudo publicar. Revisa tu conexión.", Toast.LENGTH_LONG).show()
+                    }
+                }
             },
-            enabled = pickedUri != null && title.isNotBlank(),
+            enabled = pickedUri != null && title.isNotBlank() && !uploading,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 20.dp)
         ) {
-            Text("Publicar fondo")
+            if (uploading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.height(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Text("  Publicando…")
+            } else {
+                Text("Publicar fondo")
+            }
         }
     }
 }
