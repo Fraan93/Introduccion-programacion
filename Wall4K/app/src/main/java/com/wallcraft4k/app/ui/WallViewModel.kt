@@ -13,11 +13,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** A browsable category mapped to a wallhaven search query + minimum resolution. */
+/** A browsable category mapped to a wallhaven search query + minimum PORTRAIT resolution. */
 data class Category(
     val label: String,
     val query: String,
-    val atleast: String = "1920x1080"
+    val atleast: String = "1080x1920"
 )
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
@@ -28,8 +28,8 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     val categories: List<Category> = listOf(
         Category("Popular", ""),
-        Category("8K", "", atleast = "7680x4320"),      // 8K por separado
-        Category("4K", "", atleast = "3840x2160"),      // 4K por separado
+        Category("8K", "", atleast = "4320x7680"),      // 8K vertical por separado
+        Category("4K", "", atleast = "2160x3840"),      // 4K vertical por separado
         Category("Anime", "anime"),
         Category("AMOLED", "amoled"),
         Category("Oscuro", "dark"),
@@ -60,7 +60,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     val selectedCategory: StateFlow<Category> = _selectedCategory.asStateFlow()
 
     private var currentQuery = ""
-    private var currentAtleast = "1920x1080"
+    private var currentAtleast = "1080x1920"
     private var page = 1
     private var endReached = false
 
@@ -88,7 +88,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun search(text: String) {
         _selectedCategory.value = Category(text.ifBlank { "Búsqueda" }, text)
-        startQuery(text, "1920x1080")
+        startQuery(text, "1080x1920")
     }
 
     private fun startQuery(query: String, atleast: String) {

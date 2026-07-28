@@ -32,12 +32,13 @@ object WallhavenApi {
     /**
      * @param query   search terms (empty = top list of everything)
      * @param page    1-based page index (wallhaven returns 24 per page)
-     * @param atleast minimum resolution "WxH" (e.g. 3840x2160 for 4K, 7680x4320 for 8K)
+     * @param atleast minimum PORTRAIT resolution "WxH"
+     *                (e.g. 2160x3840 for 4K vertical, 4320x7680 for 8K vertical)
      */
     suspend fun search(
         query: String,
         page: Int,
-        atleast: String = "1920x1080"
+        atleast: String = "1080x1920"
     ): List<Wallpaper> = withContext(Dispatchers.IO) {
         runCatching {
             val q = URLEncoder.encode(query, "UTF-8")
@@ -51,6 +52,8 @@ object WallhavenApi {
                 append("&sorting=").append(sorting)
                 if (query.isBlank()) append("&topRange=1y")
                 append("&order=desc")
+                // Mobile-optimised: portrait-only, phone-shaped wallpapers.
+                append("&ratios=portrait")
                 append("&atleast=").append(atleast)
                 append("&page=").append(page)
             }
