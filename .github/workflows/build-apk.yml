@@ -48,7 +48,15 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Compilar APK de debug
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tee /tmp/build.log
+
+      - name: Mostrar errores de compilación
+        if: failure()
+        run: |
+          echo "================ ERRORES ================"
+          grep -nE "^e: |: error:| FAILED$|Unresolved|but got|expected|Type mismatch|None of the following" /tmp/build.log | head -80 || true
 
       - name: Renombrar APK
         run: cp app/build/outputs/apk/debug/app-debug.apk Wall4K-debug.apk
