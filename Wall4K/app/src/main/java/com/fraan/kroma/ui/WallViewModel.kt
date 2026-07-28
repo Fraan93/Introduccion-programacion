@@ -27,7 +27,9 @@ data class Category(
     val atleast: String = "1080x1920",
     val whCategories: String = "111",
     val useStock: Boolean = true,
-    val whSorting: String? = null
+    val whSorting: String? = null,
+    /** Curated showcase themes: one is picked at random on each visit. */
+    val queryPool: List<String> = emptyList()
 )
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
@@ -70,11 +72,25 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     val categories: List<Category> = listOf(
         Category("Popular", ""),
-        // 8K/4K: sin la categoría "personas" (evita la avalancha de retratos de
-        // estudio, lo único que abunda en ultra resolución) y ordenadas por
-        // favoritos de todos los tiempos para que salga lo mejor del catálogo.
+        // 8K: sin la categoría "personas" (evita la avalancha de retratos de
+        // estudio, lo único que abunda en ultra resolución) y ordenada por
+        // favoritos de todos los tiempos.
         Category("8K", "", atleast = "4320x7680", whCategories = "110", whSorting = "favorites"),
-        Category("4K", "", atleast = "2160x3840", whCategories = "110", whSorting = "favorites"),
+        // 4K: vitrina curada de arte espectacular (planetas, espacio, fantasía,
+        // arte digital...) — solo catálogo general, sin fotos de stock, ordenada
+        // por favoritos históricos. Cada visita rota el tema.
+        Category(
+            "4K", "",
+            atleast = "2160x3840",
+            whCategories = "100",
+            useStock = false,
+            whSorting = "favorites",
+            queryPool = listOf(
+                "space", "planet", "galaxy", "nebula", "earth",
+                "fantasy landscape", "digital art", "mountains",
+                "aurora", "cyberpunk city", "abstract 3d", "underwater"
+            )
+        ),
         Category("Anime", "", whCategories = "010", useStock = false),      // catálogo anime real
         Category("Waifus", "anime girls", whCategories = "010", useStock = false),
         Category("AMOLED", "amoled black", useStock = false),
@@ -139,7 +155,9 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(category: Category) {
         _selectedCategory.value = category
-        startQuery(category.query, category.atleast, category.whCategories, category.useStock, category.whSorting)
+        // Showcase categories rotate among curated themes on every visit.
+        val query = if (category.queryPool.isNotEmpty()) category.queryPool.random() else category.query
+        startQuery(query, category.atleast, category.whCategories, category.useStock, category.whSorting)
     }
 
     fun search(text: String) {

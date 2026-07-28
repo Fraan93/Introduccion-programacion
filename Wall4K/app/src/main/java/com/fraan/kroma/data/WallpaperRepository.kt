@@ -101,7 +101,9 @@ class WallpaperRepository(
 
         return when {
             merged.isNotEmpty() -> merged
-            page == 1 -> SampleData.wallpapers // offline fallback
+            // Offline fallback only for the broad Popular feed: sparse curated
+            // categories must show a clean empty state, not placeholder photos.
+            page == 1 && query.isBlank() && atleast == "1080x1920" -> SampleData.wallpapers
             else -> emptyList()
         }
     }
