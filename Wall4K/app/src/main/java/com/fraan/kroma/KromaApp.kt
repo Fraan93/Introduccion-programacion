@@ -2,10 +2,13 @@ package com.fraan.kroma
 
 import android.app.Application
 import com.fraan.kroma.data.PremiumRepository
+import com.fraan.kroma.data.SettingsRepository
 import com.fraan.kroma.data.WallpaperRepository
 import com.fraan.kroma.data.remote.FirebaseWallpaperSource
 
 class KromaApp : Application() {
+
+    val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
 
     val repository: WallpaperRepository by lazy {
         // Firebase auto-initialises when a valid google-services.json is present.

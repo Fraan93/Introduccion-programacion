@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,9 @@ import com.fraan.kroma.data.model.Wallpaper
 import com.fraan.kroma.util.WallpaperActions
 import com.fraan.kroma.util.WallpaperTarget
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DetailScreen(
@@ -75,13 +79,51 @@ fun DetailScreen(
     var busy by remember { mutableStateOf(false) }
     var showWallpaperDialog by remember { mutableStateOf(false) }
 
-    Box(modifier.fillMaxSize().background(Color.Black)) {
+    // Tap the image to toggle full-screen preview (lock-screen style mock).
+    var previewMode by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(interactionSource = interaction, indication = null) {
+                previewMode = !previewMode
+            }
+    ) {
         AsyncImage(
             model = ImageRequest.Builder(context).data(wallpaper.fullUrl).crossfade(true).build(),
             contentDescription = wallpaper.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+
+        if (previewMode) {
+            // Lock-screen style preview: just the wallpaper + clock, no chrome.
+            val now = remember { Date() }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = remember { SimpleDateFormat("HH:mm", Locale.getDefault()).format(now) },
+                    color = Color.White,
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.Light
+                )
+                Text(
+                    text = remember {
+                        SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "ES")).format(now)
+                    },
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            return@Box
+        }
 
         // Top bar: back + discreet author credit + optional delete.
         Row(
@@ -148,7 +190,9 @@ fun DetailScreen(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = wallpaper.resolution.ifBlank { " " },
+                text = listOf(wallpaper.resolution, "toca la imagen para vista previa")
+                    .filter { it.isNotBlank() }
+                    .joinToString("  ·  "),
                 color = Color.White.copy(alpha = 0.75f),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 2.dp, bottom = 14.dp)

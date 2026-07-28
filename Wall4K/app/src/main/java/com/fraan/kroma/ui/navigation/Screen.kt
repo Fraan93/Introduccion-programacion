@@ -13,6 +13,8 @@ sealed class Screen(val route: String) {
     }
 
     data object Paywall : Screen("paywall")
+
+    data object Settings : Screen("settings")
 }
 
 enum class TopLevelDestination(

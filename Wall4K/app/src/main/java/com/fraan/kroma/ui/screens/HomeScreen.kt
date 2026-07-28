@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,15 +47,14 @@ fun HomeScreen(
     categories: List<Category>,
     selected: Category,
     wallpapers: List<Wallpaper>,
-    favorites: Set<String>,
     loading: Boolean,
     isPremium: Boolean,
     onSelectCategory: (Category) -> Unit,
     onSearch: (String) -> Unit,
     onOpen: (Wallpaper) -> Unit,
-    onToggleFavorite: (Wallpaper) -> Unit,
     onLoadMore: () -> Unit,
     onOpenPremium: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var query by remember { mutableStateOf("") }
@@ -107,9 +107,16 @@ fun HomeScreen(
                     )
                 }
             }
+            IconButton(onClick = onOpenSettings) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "Ajustes",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Text(
-            text = "Miles de fondos 4K y 8K",
+            text = "Fondos en HD, 2K, 4K y 8K",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 12.dp)
@@ -173,9 +180,7 @@ fun HomeScreen(
         } else {
             WallpaperStaggeredGrid(
                 wallpapers = wallpapers,
-                favorites = favorites,
                 onOpen = onOpen,
-                onToggleFavorite = onToggleFavorite,
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 12.dp),
                 loading = loading,
                 onReachEnd = onLoadMore

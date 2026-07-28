@@ -23,7 +23,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
+import com.fraan.kroma.data.ThemeMode
 import com.fraan.kroma.data.model.WallpaperSource
 import com.fraan.kroma.ui.Category
 import com.fraan.kroma.ui.WallViewModel
@@ -34,6 +36,7 @@ import com.fraan.kroma.ui.screens.DetailScreen
 import com.fraan.kroma.ui.screens.FavoritesScreen
 import com.fraan.kroma.ui.screens.HomeScreen
 import com.fraan.kroma.ui.screens.PaywallScreen
+import com.fraan.kroma.ui.screens.SettingsScreen
 import com.fraan.kroma.ui.screens.UploadScreen
 import com.fraan.kroma.ui.theme.KromaTheme
 
@@ -42,7 +45,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            KromaTheme {
+            val theme by (application as KromaApp).settingsRepository.theme
+                .collectAsState(initial = ThemeMode.SYSTEM)
+            KromaTheme(
+                darkTheme = when (theme) {
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    ThemeMode.DARK -> true
+                    ThemeMode.LIGHT -> false
+                }
+            ) {
                 AppRoot()
             }
         }
@@ -119,15 +130,14 @@ private fun AppRoot() {
                     categories = vm.categories,
                     selected = selectedCategory,
                     wallpapers = displayed,
-                    favorites = favoriteIds,
                     loading = loading,
                     isPremium = isPremium,
                     onSelectCategory = { pickCategory(it) },
                     onSearch = { vm.search(it) },
                     onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
-                    onToggleFavorite = { vm.toggleFavorite(it) },
                     onLoadMore = { vm.loadMore() },
-                    onOpenPremium = { navController.navigate(Screen.Paywall.route) }
+                    onOpenPremium = { navController.navigate(Screen.Paywall.route) },
+                    onOpenSettings = { navController.navigate(Screen.Settings.route) }
                 )
             }
             composable(TopLevelDestination.CATEGORIES.route) {
@@ -176,9 +186,18 @@ private fun AppRoot() {
             composable(TopLevelDestination.FAVORITES.route) {
                 FavoritesScreen(
                     favoritesList = favoriteList,
-                    favorites = favoriteIds,
-                    onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
-                    onToggleFavorite = { vm.toggleFavorite(it) }
+                    onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) }
+                )
+            }
+            composable(Screen.Settings.route) {
+                val theme by vm.theme.collectAsState()
+                SettingsScreen(
+                    theme = theme,
+                    onSetTheme = { vm.setTheme(it) },
+                    isPremium = isPremium,
+                    activePlan = activePlan,
+                    onOpenPaywall = { navController.navigate(Screen.Paywall.route) },
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(Screen.Detail.route) { entry ->

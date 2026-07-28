@@ -16,9 +16,7 @@ import com.fraan.kroma.ui.components.WallpaperStaggeredGrid
 @Composable
 fun FavoritesScreen(
     favoritesList: List<Wallpaper>,
-    favorites: Set<String>,
     onOpen: (Wallpaper) -> Unit,
-    onToggleFavorite: (Wallpaper) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize()) {
@@ -33,9 +31,7 @@ fun FavoritesScreen(
         } else {
             WallpaperStaggeredGrid(
                 wallpapers = favoritesList,
-                favorites = favorites,
                 onOpen = onOpen,
-                onToggleFavorite = onToggleFavorite,
                 contentPadding = PaddingValues(12.dp)
             )
         }

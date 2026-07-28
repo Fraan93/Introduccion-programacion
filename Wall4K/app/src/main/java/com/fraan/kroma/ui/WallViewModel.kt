@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fraan.kroma.KromaApp
 import com.fraan.kroma.data.PremiumPlan
+import com.fraan.kroma.data.ThemeMode
 import com.fraan.kroma.data.model.Wallpaper
+import kotlin.random.Random
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,9 +31,25 @@ data class Category(
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val wall4kApp = app as KromaApp
-    private val repo = wall4kApp.repository
-    private val premiumRepo = wall4kApp.premiumRepository
+    private val kromaApp = app as KromaApp
+    private val repo = kromaApp.repository
+    private val premiumRepo = kromaApp.premiumRepository
+    private val settingsRepo = kromaApp.settingsRepository
+
+    /**
+     * Every wallpaper that has passed through the UI, by id. Detail screens
+     * resolve wallpapers from here, so an item never "disappears" mid-navigation
+     * (e.g. while the similar-wallpapers list is being replaced).
+     */
+    private val cache = HashMap<String, Wallpaper>()
+
+    // ---- Settings ----
+    val theme: StateFlow<ThemeMode> =
+        settingsRepo.theme.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
+
+    fun setTheme(mode: ThemeMode) {
+        viewModelScope.launch { settingsRepo.setTheme(mode) }
+    }
 
     val isRemote: Boolean = repo.isRemote
 
@@ -54,6 +72,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         Category("8K", "", atleast = "4320x7680"),                          // 8K vertical por separado
         Category("4K", "", atleast = "2160x3840"),                          // 4K vertical por separado
         Category("Anime", "", whCategories = "010", useStock = false),      // catálogo anime real
+        Category("Waifus", "anime girls", whCategories = "010", useStock = false),
         Category("AMOLED", "amoled black", useStock = false),
         Category("Oscuro", "dark", useStock = false),
         Category("Coches", "car"),
@@ -89,6 +108,13 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private var page = 1
     private var endReached = false
 
+    /**
+     * Random page offset for the broad feeds (Popular/4K…): each visit starts at a
+     * different point of the top list so the photos rotate instead of always being
+     * the same. Not applied to specific searches, where order relevance matters.
+     */
+    private var pageOffset = Random.nextInt(0, 10)
+
     // ---- Favourites & uploads ----
     val favoriteWallpapers: StateFlow<List<Wallpaper>> =
         repo.favoriteWallpapers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -121,6 +147,8 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         currentAtleast = atleast
         currentWhCategories = whCategories
         currentUseStock = useStock
+        // Broad feeds rotate on every visit; searches stay deterministic.
+        pageOffset = if (query.isBlank()) Random.nextInt(0, 10) else 0
         page = 1
         endReached = false
         _browse.value = emptyList()
@@ -133,12 +161,16 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private var relatedForId: String? = null
 
     fun loadRelated(wallpaper: Wallpaper) {
+        cache[wallpaper.id] = wallpaper
         if (relatedForId == wallpaper.id) return
         relatedForId = wallpaper.id
         _related.value = emptyList()
         viewModelScope.launch {
             val results = runCatching { repo.findSimilar(wallpaper) }.getOrDefault(emptyList())
-            _related.value = results.filter { it.id != wallpaper.id }.take(14)
+                .filter { it.id != wallpaper.id }
+                .take(14)
+            results.forEach { cache[it.id] = it }
+            _related.value = results
         }
     }
 
@@ -147,11 +179,12 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         _loading.value = true
         viewModelScope.launch {
             val items = runCatching {
-                repo.browse(currentQuery, page, currentAtleast, currentWhCategories, currentUseStock)
+                repo.browse(currentQuery, page + pageOffset, currentAtleast, currentWhCategories, currentUseStock)
             }.getOrDefault(emptyList())
             if (items.isEmpty()) {
                 endReached = true
             } else {
+                items.forEach { cache[it.id] = it }
                 val existingIds = _browse.value.mapTo(HashSet()) { it.id }
                 _browse.value = _browse.value + items.filter { it.id !in existingIds }
                 page++
@@ -161,8 +194,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun wallpaperById(id: String): Wallpaper? =
-        _browse.value.firstOrNull { it.id == id }
-            ?: _related.value.firstOrNull { it.id == id }
+        cache[id]
             ?: favoriteWallpapers.value.firstOrNull { it.id == id }
             ?: uploads.value.firstOrNull { it.id == id }
 
