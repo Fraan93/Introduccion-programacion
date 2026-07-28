@@ -13,35 +13,35 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val Purple = Color(0xFF6C4DF6)
-private val PurpleLight = Color(0xFF9B84FF)
-private val Accent = Color(0xFF00D0BD)
+// Wallcraft-style: amber/gold accent on a deep navy background.
+private val Gold = Color(0xFFF5B301)
+private val GoldSoft = Color(0xFFFFD35A)
 
 private val DarkColors = darkColorScheme(
-    primary = Purple,
-    onPrimary = Color.White,
-    secondary = Accent,
-    onSecondary = Color(0xFF00201C),
-    background = Color(0xFF0B0B10),
-    onBackground = Color(0xFFECEBF4),
-    surface = Color(0xFF14141C),
-    onSurface = Color(0xFFECEBF4),
-    surfaceVariant = Color(0xFF1E1E28),
-    onSurfaceVariant = Color(0xFFB9B7C9),
-    outline = Color(0xFF34343F)
+    primary = Gold,
+    onPrimary = Color(0xFF1A1200),
+    secondary = GoldSoft,
+    onSecondary = Color(0xFF1A1200),
+    background = Color(0xFF0C111C),
+    onBackground = Color(0xFFEDEFF5),
+    surface = Color(0xFF121826),
+    onSurface = Color(0xFFEDEFF5),
+    surfaceVariant = Color(0xFF1B2233),
+    onSurfaceVariant = Color(0xFFAAB2C5),
+    outline = Color(0xFF2C3547)
 )
 
 private val LightColors = lightColorScheme(
-    primary = Purple,
+    primary = Color(0xFFB8860B),
     onPrimary = Color.White,
-    secondary = Accent,
-    background = Color(0xFFF6F5FB),
-    onBackground = Color(0xFF16151C),
+    secondary = Gold,
+    background = Color(0xFFF4F5F9),
+    onBackground = Color(0xFF12151C),
     surface = Color.White,
-    onSurface = Color(0xFF16151C),
-    surfaceVariant = Color(0xFFEBE9F5),
-    onSurfaceVariant = Color(0xFF4A4954),
-    outline = Color(0xFFD5D3E0)
+    onSurface = Color(0xFF12151C),
+    surfaceVariant = Color(0xFFE7E9F0),
+    onSurfaceVariant = Color(0xFF4A4E58),
+    outline = Color(0xFFD3D6DE)
 )
 
 private val AppTypography = Typography()

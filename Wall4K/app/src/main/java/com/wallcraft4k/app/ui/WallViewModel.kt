@@ -10,40 +10,109 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/** A browsable category mapped to a wallhaven search query. */
+data class Category(val label: String, val query: String)
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = (app as Wall4KApp).repository
 
-    /** True when uploads are shared via Firebase; false when they stay on-device. */
     val isRemote: Boolean = repo.isRemote
+
+    val categories: List<Category> = listOf(
+        Category("Popular", ""),
+        Category("4K / 8K", "4k"),
+        Category("Anime", "anime"),
+        Category("Naturaleza", "nature landscape"),
+        Category("Coches", "car"),
+        Category("Ciudad", "city"),
+        Category("Abstracto", "abstract"),
+        Category("Espacio", "space galaxy"),
+        Category("Oscuro / AMOLED", "dark amoled"),
+        Category("Minimalista", "minimal"),
+        Category("Animales", "animal"),
+        Category("Videojuegos", "video game"),
+        Category("Arte", "digital art"),
+        Category("Neón", "neon"),
+        Category("Montañas", "mountains"),
+        Category("Flores", "flowers")
+    )
+
+    // ---- Browse feed with infinite pagination ----
+    private val _browse = MutableStateFlow<List<Wallpaper>>(emptyList())
+    val browse: StateFlow<List<Wallpaper>> = _browse.asStateFlow()
+
+    private val _loading = MutableStateFlow(false)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    private val _selectedCategory = MutableStateFlow(categories.first())
+    val selectedCategory: StateFlow<Category> = _selectedCategory.asStateFlow()
+
+    private var currentQuery = ""
+    private var page = 1
+    private var endReached = false
+
+    // ---- Favourites & uploads ----
+    val favoriteWallpapers: StateFlow<List<Wallpaper>> =
+        repo.favoriteWallpapers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val favoriteIds: StateFlow<Set<String>> =
+        repo.favoriteIds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val uploads: StateFlow<List<Wallpaper>> =
+        repo.uploads.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _uploading = MutableStateFlow(false)
     val uploading: StateFlow<Boolean> = _uploading.asStateFlow()
 
-    val wallpapers: StateFlow<List<Wallpaper>> =
-        repo.allWallpapers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    init {
+        loadMore()
+    }
 
-    val favorites: StateFlow<Set<String>> =
-        repo.favorites.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    fun selectCategory(category: Category) {
+        _selectedCategory.value = category
+        startQuery(category.query)
+    }
 
-    val categories: StateFlow<List<String>> =
-        repo.categories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun search(text: String) {
+        _selectedCategory.value = Category(text.ifBlank { "Búsqueda" }, text)
+        startQuery(text)
+    }
 
-    val favoriteWallpapers: StateFlow<List<Wallpaper>> =
-        repo.feed()
-            .map { (list, favs) -> list.filter { it.id in favs } }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private fun startQuery(query: String) {
+        currentQuery = query
+        page = 1
+        endReached = false
+        _browse.value = emptyList()
+        loadMore()
+    }
 
-    fun wallpaperById(id: String): Wallpaper? = wallpapers.value.firstOrNull { it.id == id }
+    fun loadMore() {
+        if (_loading.value || endReached) return
+        _loading.value = true
+        viewModelScope.launch {
+            val items = runCatching { repo.browse(currentQuery, page) }.getOrDefault(emptyList())
+            if (items.isEmpty()) {
+                endReached = true
+            } else {
+                val existingIds = _browse.value.mapTo(HashSet()) { it.id }
+                _browse.value = _browse.value + items.filter { it.id !in existingIds }
+                page++
+            }
+            _loading.value = false
+        }
+    }
 
-    fun isFavorite(id: String): Boolean = id in favorites.value
+    fun wallpaperById(id: String): Wallpaper? =
+        _browse.value.firstOrNull { it.id == id }
+            ?: favoriteWallpapers.value.firstOrNull { it.id == id }
+            ?: uploads.value.firstOrNull { it.id == id }
 
-    fun toggleFavorite(id: String) {
-        viewModelScope.launch { repo.toggleFavorite(id) }
+    fun toggleFavorite(wallpaper: Wallpaper) {
+        viewModelScope.launch { repo.toggleFavorite(wallpaper) }
     }
 
     fun addUpload(

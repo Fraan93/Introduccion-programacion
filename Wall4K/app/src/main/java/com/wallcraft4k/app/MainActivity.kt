@@ -6,12 +6,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -21,7 +22,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.collectAsState
 import com.wallcraft4k.app.data.model.WallpaperSource
 import com.wallcraft4k.app.ui.WallViewModel
 import com.wallcraft4k.app.ui.navigation.Screen
@@ -50,10 +50,12 @@ private fun AppRoot() {
     val navController = rememberNavController()
     val vm: WallViewModel = viewModel()
 
-    val wallpapers by vm.wallpapers.collectAsState()
-    val favorites by vm.favorites.collectAsState()
-    val categories by vm.categories.collectAsState()
+    val browse by vm.browse.collectAsState()
+    val loading by vm.loading.collectAsState()
+    val selectedCategory by vm.selectedCategory.collectAsState()
+    val favoriteIds by vm.favoriteIds.collectAsState()
     val favoriteList by vm.favoriteWallpapers.collectAsState()
+    val uploads by vm.uploads.collectAsState()
     val uploading by vm.uploading.collectAsState()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -66,8 +68,7 @@ private fun AppRoot() {
                 NavigationBar {
                     val destination = backStackEntry?.destination
                     TopLevelDestination.entries.forEach { dest ->
-                        val selected =
-                            destination?.hierarchy?.any { it.route == dest.route } == true
+                        val selected = destination?.hierarchy?.any { it.route == dest.route } == true
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -95,26 +96,38 @@ private fun AppRoot() {
                 .padding(innerPadding)
         ) {
             composable(TopLevelDestination.HOME.route) {
+                // Show the user's uploads at the top of the "Popular" feed.
+                val displayed =
+                    if (selectedCategory == vm.categories.first()) uploads + browse else browse
                 HomeScreen(
-                    wallpapers = wallpapers,
-                    favorites = favorites,
-                    categories = categories,
+                    categories = vm.categories,
+                    selected = selectedCategory,
+                    wallpapers = displayed,
+                    favorites = favoriteIds,
+                    loading = loading,
+                    onSelectCategory = { vm.selectCategory(it) },
+                    onSearch = { vm.search(it) },
                     onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
-                    onToggleFavorite = { vm.toggleFavorite(it.id) }
+                    onToggleFavorite = { vm.toggleFavorite(it) },
+                    onLoadMore = { vm.loadMore() }
                 )
             }
             composable(TopLevelDestination.CATEGORIES.route) {
                 CategoriesScreen(
-                    wallpapers = wallpapers,
-                    favorites = favorites,
-                    categories = categories,
-                    onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
-                    onToggleFavorite = { vm.toggleFavorite(it.id) }
+                    categories = vm.categories,
+                    onPick = { category ->
+                        vm.selectCategory(category)
+                        navController.navigate(TopLevelDestination.HOME.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             }
             composable(TopLevelDestination.UPLOAD.route) {
                 UploadScreen(
-                    categories = categories,
+                    categories = vm.categories.map { it.label },
                     isRemote = vm.isRemote,
                     uploading = uploading,
                     onSubmit = { uri, title, author, category, onResult ->
@@ -125,9 +138,9 @@ private fun AppRoot() {
             composable(TopLevelDestination.FAVORITES.route) {
                 FavoritesScreen(
                     favoritesList = favoriteList,
-                    favorites = favorites,
+                    favorites = favoriteIds,
                     onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
-                    onToggleFavorite = { vm.toggleFavorite(it.id) }
+                    onToggleFavorite = { vm.toggleFavorite(it) }
                 )
             }
             composable(Screen.Detail.route) { entry ->
@@ -138,11 +151,9 @@ private fun AppRoot() {
                 } else {
                     DetailScreen(
                         wallpaper = wp,
-                        isFavorite = wp.id in favorites,
+                        isFavorite = wp.id in favoriteIds,
                         onBack = { navController.popBackStack() },
-                        onToggleFavorite = { vm.toggleFavorite(wp.id) },
-                        // Delete only for on-device uploads. In shared (Firebase) mode
-                        // ownership isn't tracked yet, so we don't expose delete.
+                        onToggleFavorite = { vm.toggleFavorite(wp) },
                         onDelete = if (wp.source == WallpaperSource.UPLOAD && !vm.isRemote) {
                             { vm.deleteUpload(wp.id) }
                         } else null

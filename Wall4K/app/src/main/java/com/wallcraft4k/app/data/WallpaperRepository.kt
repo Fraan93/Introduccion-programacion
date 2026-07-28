@@ -6,14 +6,13 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wallcraft4k.app.data.model.Wallpaper
 import com.wallcraft4k.app.data.model.WallpaperSource
 import com.wallcraft4k.app.data.remote.FirebaseWallpaperSource
+import com.wallcraft4k.app.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -24,14 +23,14 @@ import java.util.UUID
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "wall4k")
 
 /**
- * Single source of truth. Combines the built-in [SampleData] catalog with
- * community uploads, and tracks favourites.
+ * Single source of truth.
  *
- * Uploads have two modes, chosen automatically:
- *  - **Remote** (when [remote] != null, i.e. Firebase is configured): uploads are
- *    stored in Cloud Storage + Firestore and shared with every user.
- *  - **Local** (fallback): uploads are copied into the app's private storage and
- *    only visible on this device. Favourites always persist locally via DataStore.
+ *  - **Browse catalog**: paged, high-resolution wallpapers fetched live from the
+ *    wallhaven.cc API ([browse]); falls back to the small bundled [SampleData]
+ *    only if the network is unavailable on the first page.
+ *  - **Uploads**: shared via Firebase when configured, else stored on-device.
+ *  - **Favourites**: the full wallpaper is persisted (so it displays even when the
+ *    original page is no longer in memory).
  */
 class WallpaperRepository(
     private val appContext: Context,
@@ -42,49 +41,60 @@ class WallpaperRepository(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val favoritesKey = stringSetPreferencesKey("favorites")
+    private val favoritesKey = stringPreferencesKey("favorites_json")
     private val uploadsKey = stringPreferencesKey("uploads_json")
 
     private val uploadsDir: File by lazy {
         File(appContext.filesDir, "uploads").apply { mkdirs() }
     }
 
-    /** Ids the user marked as favourite. */
-    val favorites: Flow<Set<String>> =
-        appContext.dataStore.data.map { it[favoritesKey] ?: emptySet() }
+    private fun decode(raw: String?): List<Wallpaper> =
+        raw?.let { runCatching { json.decodeFromString<List<Wallpaper>>(it) }.getOrDefault(emptyList()) }
+            ?: emptyList()
+
+    // ---- Browse (remote catalog) ----
+
+    /** Fetches page [page] (1-based) of wallpapers for [query] (empty = popular). */
+    suspend fun browse(query: String, page: Int): List<Wallpaper> {
+        val results = WallhavenApi.search(query, page)
+        return when {
+            results.isNotEmpty() -> results
+            page == 1 -> SampleData.wallpapers // offline fallback
+            else -> emptyList()
+        }
+    }
+
+    // ---- Favourites ----
+
+    val favoriteWallpapers: Flow<List<Wallpaper>> =
+        appContext.dataStore.data.map { decode(it[favoritesKey]) }
+
+    val favoriteIds: Flow<Set<String>> =
+        favoriteWallpapers.map { list -> list.map { it.id }.toSet() }
+
+    suspend fun toggleFavorite(wallpaper: Wallpaper) {
+        appContext.dataStore.edit { prefs ->
+            val current = decode(prefs[favoritesKey])
+            val updated = if (current.any { it.id == wallpaper.id }) {
+                current.filterNot { it.id == wallpaper.id }
+            } else {
+                listOf(wallpaper) + current
+            }
+            prefs[favoritesKey] = json.encodeToString(updated)
+        }
+    }
+
+    // ---- Uploads ----
 
     private val localUploads: Flow<List<Wallpaper>> =
-        appContext.dataStore.data.map { prefs ->
-            prefs[uploadsKey]?.let { raw ->
-                runCatching { json.decodeFromString<List<Wallpaper>>(raw) }.getOrDefault(emptyList())
-            } ?: emptyList()
-        }
+        appContext.dataStore.data.map { decode(it[uploadsKey]) }
 
     /** Community uploads, newest first — from Firebase if configured, else local. */
     val uploads: Flow<List<Wallpaper>> = remote?.communityFeed() ?: localUploads
 
-    /** Catalog + uploads, uploads shown first so new content is visible. */
-    val allWallpapers: Flow<List<Wallpaper>> =
-        uploads.map { up -> up + SampleData.wallpapers }
-
-    val categories: Flow<List<String>> =
-        allWallpapers.map { list -> list.map { it.category }.distinct().sorted() }
-
-    /** Emits list + favourites together for convenient UI consumption. */
-    fun feed(): Flow<Pair<List<Wallpaper>, Set<String>>> =
-        combine(allWallpapers, favorites) { list, favs -> list to favs }
-
-    suspend fun toggleFavorite(id: String) {
-        appContext.dataStore.edit { prefs ->
-            val current = prefs[favoritesKey] ?: emptySet()
-            prefs[favoritesKey] = if (id in current) current - id else current + id
-        }
-    }
-
     /**
      * Publishes a new upload. In remote mode it goes to Firebase (shared with
      * everyone); otherwise it is copied into private storage (this device only).
-     * Returns the created [Wallpaper].
      */
     suspend fun addUpload(
         source: Uri,
@@ -120,10 +130,7 @@ class WallpaperRepository(
         )
 
         appContext.dataStore.edit { prefs ->
-            val existing = prefs[uploadsKey]?.let {
-                runCatching { json.decodeFromString<List<Wallpaper>>(it) }.getOrDefault(emptyList())
-            } ?: emptyList()
-            prefs[uploadsKey] = json.encodeToString(listOf(wallpaper) + existing)
+            prefs[uploadsKey] = json.encodeToString(listOf(wallpaper) + decode(prefs[uploadsKey]))
         }
         wallpaper
     }
@@ -131,10 +138,7 @@ class WallpaperRepository(
     suspend fun deleteUpload(id: String) {
         remote?.let {
             it.delete(id)
-            appContext.dataStore.edit { prefs ->
-                val favs = prefs[favoritesKey] ?: emptySet()
-                if (id in favs) prefs[favoritesKey] = favs - id
-            }
+            removeFavorite(id)
             return
         }
         deleteLocalUpload(id)
@@ -143,12 +147,14 @@ class WallpaperRepository(
     private suspend fun deleteLocalUpload(id: String) = withContext(Dispatchers.IO) {
         File(uploadsDir, "$id.jpg").delete()
         appContext.dataStore.edit { prefs ->
-            val existing = prefs[uploadsKey]?.let {
-                runCatching { json.decodeFromString<List<Wallpaper>>(it) }.getOrDefault(emptyList())
-            } ?: emptyList()
-            prefs[uploadsKey] = json.encodeToString(existing.filterNot { it.id == id })
-            val favs = prefs[favoritesKey] ?: emptySet()
-            if (id in favs) prefs[favoritesKey] = favs - id
+            prefs[uploadsKey] = json.encodeToString(decode(prefs[uploadsKey]).filterNot { it.id == id })
+            prefs[favoritesKey] = json.encodeToString(decode(prefs[favoritesKey]).filterNot { it.id == id })
+        }
+    }
+
+    private suspend fun removeFavorite(id: String) {
+        appContext.dataStore.edit { prefs ->
+            prefs[favoritesKey] = json.encodeToString(decode(prefs[favoritesKey]).filterNot { it.id == id })
         }
     }
 }
