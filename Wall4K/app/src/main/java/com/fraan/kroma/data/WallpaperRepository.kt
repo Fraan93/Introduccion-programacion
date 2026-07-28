@@ -72,7 +72,8 @@ class WallpaperRepository(
         page: Int,
         atleast: String = "1080x1920",
         whCategories: String = "111",
-        useStock: Boolean = true
+        useStock: Boolean = true,
+        whSorting: String? = null
     ): List<Wallpaper> {
         val minW = atleast.substringBefore('x').toIntOrNull() ?: 1080
         val minH = atleast.substringAfter('x').toIntOrNull() ?: 1920
@@ -85,7 +86,9 @@ class WallpaperRepository(
 
         val merged = coroutineScope {
             val wallhaven = async {
-                runCatching { WallhavenApi.search(query, page, atleast, whCategories) }.getOrDefault(emptyList())
+                runCatching {
+                    WallhavenApi.search(query, page, atleast, whCategories, whSorting)
+                }.getOrDefault(emptyList())
             }
             val pexels = async {
                 if (useStock) runCatching { PexelsApi.search(query, page) }.getOrDefault(emptyList()) else emptyList()

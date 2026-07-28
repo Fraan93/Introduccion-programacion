@@ -41,20 +41,22 @@ object WallhavenApi {
         query: String,
         page: Int,
         atleast: String = "1080x1920",
-        categories: String = "111"
+        categories: String = "111",
+        sorting: String? = null
     ): List<Wallpaper> = withContext(Dispatchers.IO) {
         runCatching {
             val q = URLEncoder.encode(query, "UTF-8")
-            // With a query -> relevance (searches the WHOLE catalog, many results).
-            // Without a query -> top list of the last year.
-            val sorting = if (query.isBlank()) "toplist" else "relevance"
+            // Explicit sorting wins (e.g. "favorites" = all-time best for sparse
+            // ultra-res feeds). Otherwise: query -> relevance, no query -> top of
+            // the last year.
+            val effectiveSorting = sorting ?: if (query.isBlank()) "toplist" else "relevance"
             val url = buildString {
                 append(BASE)
                 append("?q=").append(q)
                 append("&categories=").append(categories)
                 append("&purity=100")
-                append("&sorting=").append(sorting)
-                if (query.isBlank()) append("&topRange=1y")
+                append("&sorting=").append(effectiveSorting)
+                if (effectiveSorting == "toplist" && query.isBlank()) append("&topRange=1y")
                 append("&order=desc")
                 // Mobile-optimised: portrait-only, phone-shaped wallpapers.
                 append("&ratios=portrait")

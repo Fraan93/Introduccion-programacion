@@ -26,7 +26,8 @@ data class Category(
     val query: String,
     val atleast: String = "1080x1920",
     val whCategories: String = "111",
-    val useStock: Boolean = true
+    val useStock: Boolean = true,
+    val whSorting: String? = null
 )
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
@@ -69,8 +70,11 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     val categories: List<Category> = listOf(
         Category("Popular", ""),
-        Category("8K", "", atleast = "4320x7680"),                          // 8K vertical por separado
-        Category("4K", "", atleast = "2160x3840"),                          // 4K vertical por separado
+        // 8K/4K: sin la categoría "personas" (evita la avalancha de retratos de
+        // estudio, lo único que abunda en ultra resolución) y ordenadas por
+        // favoritos de todos los tiempos para que salga lo mejor del catálogo.
+        Category("8K", "", atleast = "4320x7680", whCategories = "110", whSorting = "favorites"),
+        Category("4K", "", atleast = "2160x3840", whCategories = "110", whSorting = "favorites"),
         Category("Anime", "", whCategories = "010", useStock = false),      // catálogo anime real
         Category("Waifus", "anime girls", whCategories = "010", useStock = false),
         Category("AMOLED", "amoled black", useStock = false),
@@ -105,6 +109,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private var currentAtleast = "1080x1920"
     private var currentWhCategories = "111"
     private var currentUseStock = true
+    private var currentWhSorting: String? = null
     private var page = 1
     private var endReached = false
 
@@ -134,21 +139,33 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(category: Category) {
         _selectedCategory.value = category
-        startQuery(category.query, category.atleast, category.whCategories, category.useStock)
+        startQuery(category.query, category.atleast, category.whCategories, category.useStock, category.whSorting)
     }
 
     fun search(text: String) {
         _selectedCategory.value = Category(text.ifBlank { "Búsqueda" }, text)
-        startQuery(text, "1080x1920", "111", true)
+        startQuery(text, "1080x1920", "111", true, null)
     }
 
-    private fun startQuery(query: String, atleast: String, whCategories: String, useStock: Boolean) {
+    private fun startQuery(
+        query: String,
+        atleast: String,
+        whCategories: String,
+        useStock: Boolean,
+        whSorting: String?
+    ) {
         currentQuery = query
         currentAtleast = atleast
         currentWhCategories = whCategories
         currentUseStock = useStock
-        // Broad feeds rotate on every visit; searches stay deterministic.
-        pageOffset = if (query.isBlank()) Random.nextInt(0, 10) else 0
+        currentWhSorting = whSorting
+        // Only the broad Popular feed rotates its starting page; sparse feeds like
+        // 8K have few pages and a random offset could leave them empty.
+        pageOffset = if (query.isBlank() && atleast == "1080x1920" && whSorting == null) {
+            Random.nextInt(0, 10)
+        } else {
+            0
+        }
         page = 1
         endReached = false
         _browse.value = emptyList()
@@ -179,7 +196,14 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         _loading.value = true
         viewModelScope.launch {
             val items = runCatching {
-                repo.browse(currentQuery, page + pageOffset, currentAtleast, currentWhCategories, currentUseStock)
+                repo.browse(
+                    currentQuery,
+                    page + pageOffset,
+                    currentAtleast,
+                    currentWhCategories,
+                    currentUseStock,
+                    currentWhSorting
+                )
             }.getOrDefault(emptyList())
             if (items.isEmpty()) {
                 endReached = true
