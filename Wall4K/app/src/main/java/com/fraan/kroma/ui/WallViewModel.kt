@@ -29,7 +29,11 @@ data class Category(
     val useStock: Boolean = true,
     val whSorting: String? = null,
     /** Curated showcase themes: one is picked at random on each visit. */
-    val queryPool: List<String> = emptyList()
+    val queryPool: List<String> = emptyList(),
+    /** Reddit subreddits ('+'-joined) — primary source for the Wallcraft look. */
+    val subreddits: String = "",
+    val redditSort: String = "top",
+    val redditTime: String = "all"
 )
 
 class WallViewModel(app: Application) : AndroidViewModel(app) {
@@ -70,15 +74,18 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Categories with `subreddits` pull curated phone wallpapers from Reddit (the
+    // Wallcraft look); `query`/`whCategories` act as a Wallhaven fallback if Reddit
+    // is unreachable. Photography themes stay on Wallhaven + stock.
     val categories: List<Category> = listOf(
-        Category("Popular", ""),
-        // 8K: sin la categoría "personas" (evita la avalancha de retratos de
-        // estudio, lo único que abunda en ultra resolución) y ordenada por
-        // favoritos de todos los tiempos.
+        Category(
+            "Popular", "",
+            subreddits = "MobileWallpaper+iphonewallpapers+WQHD_Wallpaper",
+            redditSort = "hot"
+        ),
+        // 8K: real ultra-res from Wallhaven, best of all time, no studio portraits.
         Category("8K", "", atleast = "4320x7680", whCategories = "110", whSorting = "favorites"),
-        // 4K: vitrina curada de arte espectacular (planetas, espacio, fantasía,
-        // arte digital...) — solo catálogo general, sin fotos de stock, ordenada
-        // por favoritos históricos. Cada visita rota el tema.
+        // 4K: curated concept art (planets, space, fantasy…) rotating each visit.
         Category(
             "4K", "",
             atleast = "2160x3840",
@@ -91,16 +98,31 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
                 "aurora", "cyberpunk city", "abstract 3d", "underwater"
             )
         ),
-        Category("Anime", "", whCategories = "010", useStock = false),      // catálogo anime real
-        Category("Waifus", "anime girls", whCategories = "010", useStock = false),
-        Category("AMOLED", "amoled black", useStock = false),
+        Category(
+            "Anime", "anime",
+            whCategories = "010", useStock = false,
+            subreddits = "Animewallpaper+AnimeWallpaper+MobileWallpaper"
+        ),
+        Category(
+            "AMOLED", "amoled black", useStock = false,
+            subreddits = "Amoledbackgrounds"
+        ),
+        Category(
+            "Minimalista", "minimal", useStock = false,
+            subreddits = "MinimalWallpaper+minimalist"
+        ),
+        Category(
+            "Coches", "car",
+            subreddits = "carwallpapers+CarsWallpapers"
+        ),
+        Category(
+            "Espacio", "space",
+            subreddits = "spaceporn+SpaceWallpapers"
+        ),
         Category("Oscuro", "dark", useStock = false),
-        Category("Coches", "car"),
         Category("Ciudad", "city"),
         Category("Naturaleza", "nature"),
-        Category("Espacio", "space"),
         Category("Abstracto", "abstract"),
-        Category("Minimalista", "minimal"),
         Category("Animales", "animal"),
         Category("Videojuegos", "video game", useStock = false),
         Category("Arte", "digital art", useStock = false),
@@ -121,20 +143,20 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private val _selectedCategory = MutableStateFlow(categories.first())
     val selectedCategory: StateFlow<Category> = _selectedCategory.asStateFlow()
 
-    private var currentQuery = ""
-    private var currentAtleast = "1080x1920"
-    private var currentWhCategories = "111"
-    private var currentUseStock = true
-    private var currentWhSorting: String? = null
+    // The feed currently being shown (holds Reddit + Wallhaven parameters).
+    private var current: Category = categories.first()
     private var page = 1
     private var endReached = false
 
+    // Reddit pagination cursor + whether Reddit is the active source for `current`.
+    private var redditAfter: String? = null
+    private var redditActive = false
+
     /**
-     * Random page offset for the broad feeds (Popular/4K…): each visit starts at a
-     * different point of the top list so the photos rotate instead of always being
-     * the same. Not applied to specific searches, where order relevance matters.
+     * Random page offset for broad Wallhaven feeds so photos rotate between visits.
+     * Not applied to searches, sorted feeds, or Reddit feeds.
      */
-    private var pageOffset = Random.nextInt(0, 10)
+    private var pageOffset = 0
 
     // ---- Favourites & uploads ----
     val favoriteWallpapers: StateFlow<List<Wallpaper>> =
@@ -150,36 +172,30 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     val uploading: StateFlow<Boolean> = _uploading.asStateFlow()
 
     init {
-        loadMore()
+        startFeed(categories.first())
     }
 
     fun selectCategory(category: Category) {
         _selectedCategory.value = category
         // Showcase categories rotate among curated themes on every visit.
         val query = if (category.queryPool.isNotEmpty()) category.queryPool.random() else category.query
-        startQuery(query, category.atleast, category.whCategories, category.useStock, category.whSorting)
+        startFeed(category.copy(query = query))
     }
 
     fun search(text: String) {
-        _selectedCategory.value = Category(text.ifBlank { "Búsqueda" }, text)
-        startQuery(text, "1080x1920", "111", true, null)
+        val cat = Category(text.ifBlank { "Búsqueda" }, text)
+        _selectedCategory.value = cat
+        startFeed(cat)
     }
 
-    private fun startQuery(
-        query: String,
-        atleast: String,
-        whCategories: String,
-        useStock: Boolean,
-        whSorting: String?
-    ) {
-        currentQuery = query
-        currentAtleast = atleast
-        currentWhCategories = whCategories
-        currentUseStock = useStock
-        currentWhSorting = whSorting
-        // Only the broad Popular feed rotates its starting page; sparse feeds like
-        // 8K have few pages and a random offset could leave them empty.
-        pageOffset = if (query.isBlank() && atleast == "1080x1920" && whSorting == null) {
+    private fun startFeed(category: Category) {
+        current = category
+        redditActive = category.subreddits.isNotBlank()
+        redditAfter = null
+        // Only broad Wallhaven feeds rotate their starting page.
+        pageOffset = if (!redditActive && category.query.isBlank() &&
+            category.atleast == "1080x1920" && category.whSorting == null
+        ) {
             Random.nextInt(0, 10)
         } else {
             0
@@ -201,7 +217,16 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         relatedForId = wallpaper.id
         _related.value = emptyList()
         viewModelScope.launch {
-            val results = runCatching { repo.findSimilar(wallpaper) }.getOrDefault(emptyList())
+            val results = runCatching {
+                // Reddit items: pull more from the SAME subreddits (same theme).
+                if (wallpaper.id.startsWith("rd_") && current.subreddits.isNotBlank()) {
+                    repo.browseReddit(
+                        current.subreddits, "top", "all", null, current.atleast, current.label
+                    ).items
+                } else {
+                    repo.findSimilar(wallpaper)
+                }
+            }.getOrDefault(emptyList())
                 .filter { it.id != wallpaper.id }
                 .take(14)
             results.forEach { cache[it.id] = it }
@@ -213,26 +238,40 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         if (_loading.value || endReached) return
         _loading.value = true
         viewModelScope.launch {
-            val items = runCatching {
-                repo.browse(
-                    currentQuery,
-                    page + pageOffset,
-                    currentAtleast,
-                    currentWhCategories,
-                    currentUseStock,
-                    currentWhSorting
-                )
-            }.getOrDefault(emptyList())
-            if (items.isEmpty()) {
-                endReached = true
+            if (redditActive) {
+                val res = runCatching {
+                    repo.browseReddit(
+                        current.subreddits, current.redditSort, current.redditTime,
+                        redditAfter, current.atleast, current.label
+                    )
+                }.getOrNull()
+                // Reddit unreachable / empty on the first page -> fall back to Wallhaven.
+                if (res == null || (redditAfter == null && res.items.isEmpty())) {
+                    redditActive = false
+                    _loading.value = false
+                    loadMore()
+                    return@launch
+                }
+                redditAfter = res.nextAfter
+                if (res.nextAfter == null) endReached = true
+                appendItems(res.items)
             } else {
-                items.forEach { cache[it.id] = it }
-                val existingIds = _browse.value.mapTo(HashSet()) { it.id }
-                _browse.value = _browse.value + items.filter { it.id !in existingIds }
-                page++
+                val items = runCatching {
+                    repo.browse(
+                        current.query, page + pageOffset, current.atleast,
+                        current.whCategories, current.useStock, current.whSorting
+                    )
+                }.getOrDefault(emptyList())
+                if (items.isEmpty()) endReached = true else { appendItems(items); page++ }
             }
             _loading.value = false
         }
+    }
+
+    private fun appendItems(items: List<Wallpaper>) {
+        items.forEach { cache[it.id] = it }
+        val existing = _browse.value.mapTo(HashSet()) { it.id }
+        _browse.value = _browse.value + items.filter { it.id !in existing }
     }
 
     fun wallpaperById(id: String): Wallpaper? =

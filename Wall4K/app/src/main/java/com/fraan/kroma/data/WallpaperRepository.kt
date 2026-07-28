@@ -11,6 +11,7 @@ import com.fraan.kroma.data.model.Wallpaper
 import com.fraan.kroma.data.model.WallpaperSource
 import com.fraan.kroma.data.remote.FirebaseWallpaperSource
 import com.fraan.kroma.data.remote.PexelsApi
+import com.fraan.kroma.data.remote.RedditWallpaperApi
 import com.fraan.kroma.data.remote.UnsplashApi
 import com.fraan.kroma.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +107,29 @@ class WallpaperRepository(
             page == 1 && query.isBlank() && atleast == "1080x1920" -> SampleData.wallpapers
             else -> emptyList()
         }
+    }
+
+    /**
+     * Fetches a page of curated phone wallpapers from Reddit, keeping only images
+     * that meet [atleast]. Returns the items plus the cursor for the next page.
+     */
+    suspend fun browseReddit(
+        subreddits: String,
+        sort: String,
+        time: String,
+        after: String?,
+        atleast: String,
+        category: String
+    ): RedditWallpaperApi.Page {
+        val minW = atleast.substringBefore('x').toIntOrNull() ?: 1080
+        val minH = atleast.substringAfter('x').toIntOrNull() ?: 1920
+        val page = RedditWallpaperApi.fetch(subreddits, sort, time, after, category)
+        val filtered = page.items.filter { wp ->
+            val w = wp.resolution.substringBefore('x').toIntOrNull() ?: 0
+            val h = wp.resolution.substringAfter('x').toIntOrNull() ?: 0
+            w >= minW && h >= minH
+        }
+        return RedditWallpaperApi.Page(filtered, page.nextAfter)
     }
 
     /**
