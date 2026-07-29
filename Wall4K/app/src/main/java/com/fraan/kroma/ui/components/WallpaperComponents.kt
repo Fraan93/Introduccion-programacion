@@ -1,5 +1,11 @@
 package com.fraan.kroma.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,17 +26,43 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.fraan.kroma.data.model.Wallpaper
+
+/** Subtle animated shimmer shown while a wallpaper image is still loading. */
+@Composable
+private fun ShimmerBox(modifier: Modifier = Modifier) {
+    val base = MaterialTheme.colorScheme.surfaceVariant
+    val highlight = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val x by transition.animateFloat(
+        initialValue = -600f,
+        targetValue = 600f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer-x"
+    )
+    val brush = Brush.linearGradient(
+        colors = listOf(base, highlight, base),
+        start = Offset(x, 0f),
+        end = Offset(x + 300f, 300f)
+    )
+    Box(modifier.background(brush))
+}
 
 /** Staggered heights give the feed a natural masonry rhythm. */
 private val ratios = listOf(0.62f, 0.56f, 0.70f, 0.60f, 0.66f)
@@ -60,13 +92,15 @@ fun WallpaperCard(
                 .fillMaxWidth()
                 .aspectRatio(ratioFor(wallpaper.id))
         ) {
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(wallpaper.thumbUrl)
                     .crossfade(true)
                     .build(),
                 contentDescription = wallpaper.title,
                 contentScale = ContentScale.Crop,
+                loading = { ShimmerBox(Modifier.fillMaxSize()) },
+                error = { ShimmerBox(Modifier.fillMaxSize()) },
                 modifier = Modifier.fillMaxSize()
             )
 

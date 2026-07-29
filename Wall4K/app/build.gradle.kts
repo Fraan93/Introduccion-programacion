@@ -19,8 +19,8 @@ android {
         applicationId = "com.fraan.kroma"
         minSdk = 24
         targetSdk = 35
-        versionCode = 14
-        versionName = "2.3"
+        versionCode = 15
+        versionName = "2.4"
         vectorDrawables { useSupportLibrary = true }
 
         // API keys for the extra catalogs. Provided via environment variables

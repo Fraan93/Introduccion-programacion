@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.fraan.kroma.data.model.Wallpaper
 import com.fraan.kroma.util.WallpaperActions
@@ -91,10 +92,15 @@ fun DetailScreen(
                 previewMode = !previewMode
             }
     ) {
-        AsyncImage(
+        SubcomposeAsyncImage(
             model = ImageRequest.Builder(context).data(wallpaper.fullUrl).crossfade(true).build(),
             contentDescription = wallpaper.title,
             contentScale = ContentScale.Crop,
+            loading = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
+            },
             modifier = Modifier.fillMaxSize()
         )
 
