@@ -11,7 +11,7 @@ import com.fraan.kroma.data.model.Wallpaper
 import com.fraan.kroma.data.model.WallpaperSource
 import com.fraan.kroma.data.remote.FirebaseWallpaperSource
 import com.fraan.kroma.data.remote.PollinationsApi
-import com.fraan.kroma.data.remote.RedditWallpaperApi
+import com.fraan.kroma.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -55,6 +55,19 @@ class WallpaperRepository(
 
     // ---- Browse ----
 
+    /**
+     * Reliable Wallhaven page for [query]. Primary source: always responds and each
+     * category uses a distinct query so categories differ. Real CDN images that
+     * load fast.
+     */
+    suspend fun browse(
+        query: String,
+        page: Int,
+        atleast: String = "1080x1920",
+        whCategories: String = "111",
+        whSorting: String? = null
+    ): List<Wallpaper> = WallhavenApi.search(query, page, atleast, whCategories, whSorting)
+
     /** A page of AI-generated wallpapers at the requested resolution (infinite). */
     fun browseAi(
         prompts: List<String>,
@@ -65,26 +78,16 @@ class WallpaperRepository(
     ): List<Wallpaper> = PollinationsApi.generate(prompts, page, width, height, category)
 
     /**
-     * Fetches a page of curated phone wallpapers from Reddit, keeping only images
-     * that meet [atleast]. Returns the items plus the cursor for the next page.
+     * Similar wallpapers: for Wallhaven items, read the image's REAL tags and search
+     * by them; for anything else, search by the title/category.
      */
-    suspend fun browseReddit(
-        subreddits: String,
-        sort: String,
-        time: String,
-        after: String?,
-        atleast: String,
-        category: String
-    ): RedditWallpaperApi.Page {
-        val minW = atleast.substringBefore('x').toIntOrNull() ?: 1080
-        val minH = atleast.substringAfter('x').toIntOrNull() ?: 1920
-        val page = RedditWallpaperApi.fetch(subreddits, sort, time, after, category)
-        val filtered = page.items.filter { wp ->
-            val w = wp.resolution.substringBefore('x').toIntOrNull() ?: 0
-            val h = wp.resolution.substringAfter('x').toIntOrNull() ?: 0
-            w >= minW && h >= minH
+    suspend fun findSimilar(wallpaper: Wallpaper): List<Wallpaper> {
+        val query = if (wallpaper.id.startsWith("wh_")) {
+            WallhavenApi.tags(wallpaper.id.removePrefix("wh_")).firstOrNull() ?: wallpaper.category
+        } else {
+            wallpaper.title.split(" ").take(3).joinToString(" ").ifBlank { wallpaper.category }
         }
-        return RedditWallpaperApi.Page(filtered, page.nextAfter)
+        return WallhavenApi.search(query, 1)
     }
 
     // ---- Favourites ----

@@ -17,27 +17,19 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * A browsable category. [whCategories] are wallhaven category bits ("010" = anime
- * only). [useStock] controls whether Pexels/Unsplash join in — stock-photo sites
- * pollute categories like Anime or AMOLED, so those are Wallhaven-only.
+ * A browsable category. Wallhaven is the reliable source ([query] + [whCategories]
+ * + [atleast] + [whSorting]); each category uses a distinct query so they differ.
+ * When [aiOnly] is true the category is served by the AI generator instead
+ * ([aiPrompts]) — reserved for the "IA" category and search.
  */
 data class Category(
     val label: String,
     val query: String,
     val atleast: String = "1080x1920",
     val whCategories: String = "111",
-    val useStock: Boolean = true,
     val whSorting: String? = null,
-    /** Curated showcase themes: one is picked at random on each visit. */
-    val queryPool: List<String> = emptyList(),
-    /** Reddit subreddits ('+'-joined) — primary source for the Wallcraft look. */
-    val subreddits: String = "",
-    val redditSort: String = "top",
-    val redditTime: String = "all",
-    /** AI-generation prompts. Used as the category's source when there are no
-     *  subreddits, or as the fallback when Reddit is unreachable. */
+    val aiOnly: Boolean = false,
     val aiPrompts: List<String> = emptyList(),
-    // Default AI size = Full-HD for fast generation; 4K/8K categories override it.
     val aiWidth: Int = 1080,
     val aiHeight: Int = 1920
 )
@@ -114,71 +106,30 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Categories with `subreddits` pull curated phone wallpapers from Reddit (the
-    // Wallcraft look); `query`/`whCategories` act as a Wallhaven fallback if Reddit
-    // is unreachable. Photography themes stay on Wallhaven + stock.
-    // Speed first: browsing categories use Reddit (real CDN images that load in
-    // ~1-2s). AI generation (slower, on-the-fly) is reserved for the opt-in "IA"
-    // and "8K" categories and for search, where a short wait is expected.
+    // Wallhaven (reliable) powers every browsing category, each with a DISTINCT
+    // query so they truly differ. "IA" and search use the AI generator (fast turbo).
     val categories: List<Category> = listOf(
-        Category(
-            "Popular", "",
-            subreddits = "MobileWallpaper+iphonewallpapers+WQHD_Wallpaper",
-            redditSort = "hot",
-            aiPrompts = AiPrompts.art
-        ),
-        // 4K: high-resolution REAL wallpapers from Reddit (fast); badge shows the
-        // true resolution. For guaranteed 4K/8K generated art, use "8K" or "IA".
-        Category(
-            "4K", "",
-            atleast = "1440x2560",
-            subreddits = "WQHD_Wallpaper+MobileWallpaper+iphonewallpapers",
-            aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840
-        ),
-        // 8K & IA: AI-generated (slower, on demand). 8K renders at true 8K portrait.
-        Category("8K", "", aiPrompts = AiPrompts.art, aiWidth = 4320, aiHeight = 7680),
-        Category("IA", "", aiPrompts = AiPrompts.art),
-        Category(
-            "Anime", "anime",
-            whCategories = "010",
-            subreddits = "Animewallpaper+AnimeWallpaper+MobileWallpaper",
-            aiPrompts = AiPrompts.anime
-        ),
-        Category(
-            "AMOLED", "amoled black",
-            subreddits = "Amoledbackgrounds",
-            aiPrompts = AiPrompts.amoled
-        ),
-        Category(
-            "Minimalista", "minimal",
-            subreddits = "MinimalWallpaper+minimalist",
-            aiPrompts = AiPrompts.art
-        ),
-        Category(
-            "Coches", "car",
-            subreddits = "carwallpapers+CarsWallpapers",
-            aiPrompts = listOf("a sleek sports car on a night city street, cinematic")
-        ),
-        Category(
-            "Espacio", "space",
-            subreddits = "spaceporn+SpaceWallpapers",
-            aiPrompts = AiPrompts.art
-        ),
-        Category(
-            "Naturaleza", "nature",
-            subreddits = "EarthPorn+BackgroundArt",
-            aiPrompts = AiPrompts.art
-        ),
-        Category(
-            "Ciudad", "city",
-            subreddits = "CityPorn",
-            aiPrompts = listOf("futuristic city skyline at night, neon lights")
-        ),
-        Category(
-            "Fantasía", "fantasy",
-            subreddits = "ImaginaryLandscapes+ImaginaryWorlds",
-            aiPrompts = AiPrompts.art
-        )
+        Category("Popular", ""),
+        // 4K/8K: the highest-resolution portrait wallpapers Wallhaven has (real,
+        // fast). Badge shows the true resolution.
+        Category("4K", "", atleast = "1440x2560", whSorting = "toplist"),
+        Category("8K", "", atleast = "2160x3840", whSorting = "favorites"),
+        // IA: fully AI-generated art (opt-in; each image is created on the fly).
+        Category("IA", "", aiOnly = true, aiPrompts = AiPrompts.art),
+        Category("Anime", "anime", whCategories = "010"),
+        Category("AMOLED", "amoled", whSorting = "toplist"),
+        Category("Oscuro", "dark"),
+        Category("Coches", "car"),
+        Category("Espacio", "outer space galaxy"),
+        Category("Naturaleza", "nature landscape"),
+        Category("Ciudad", "city night"),
+        Category("Abstracto", "abstract"),
+        Category("Minimalista", "minimal"),
+        Category("Neón", "neon"),
+        Category("Anime chicas", "anime girl", whCategories = "010"),
+        Category("Videojuegos", "video game"),
+        Category("Code/Tech", "technology code"),
+        Category("Fantasía", "fantasy art")
     )
 
     // ---- Browse feed with infinite pagination ----
@@ -191,18 +142,14 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private val _selectedCategory = MutableStateFlow(categories.first())
     val selectedCategory: StateFlow<Category> = _selectedCategory.asStateFlow()
 
-    // The feed currently being shown (holds Reddit + Wallhaven parameters).
+    // The feed currently being shown.
     private var current: Category = categories.first()
     private var page = 1
     private var endReached = false
 
-    // Reddit pagination cursor + whether Reddit is the active source for `current`.
-    private var redditAfter: String? = null
-    private var redditActive = false
-
     /**
-     * Random page offset for broad Wallhaven feeds so photos rotate between visits.
-     * Not applied to searches, sorted feeds, or Reddit feeds.
+     * Random page offset for the broad Popular feed so wallpapers rotate between
+     * visits. Not applied to searches, sorted feeds, or AI feeds.
      */
     private var pageOffset = 0
 
@@ -225,9 +172,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(category: Category) {
         _selectedCategory.value = category
-        // Showcase categories rotate among curated themes on every visit.
-        val query = if (category.queryPool.isNotEmpty()) category.queryPool.random() else category.query
-        startFeed(category.copy(query = query))
+        startFeed(category)
     }
 
     /** Search = generate wallpapers with the AI from whatever text the user types. */
@@ -235,6 +180,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         val cat = Category(
             label = text.ifBlank { "Búsqueda" },
             query = text,
+            aiOnly = true,
             aiPrompts = if (text.isBlank()) AiPrompts.art else listOf(text)
         )
         _selectedCategory.value = cat
@@ -243,13 +189,11 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startFeed(category: Category) {
         current = category
-        redditActive = category.subreddits.isNotBlank()
-        redditAfter = null
-        // Only broad Wallhaven feeds rotate their starting page.
-        pageOffset = if (!redditActive && category.query.isBlank() &&
+        // Only the broad Popular feed rotates its starting page.
+        pageOffset = if (!category.aiOnly && category.query.isBlank() &&
             category.atleast == "1080x1920" && category.whSorting == null
         ) {
-            Random.nextInt(0, 10)
+            Random.nextInt(0, 8)
         } else {
             0
         }
@@ -271,19 +215,15 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         _related.value = emptyList()
         viewModelScope.launch {
             val results = runCatching {
-                if (wallpaper.id.startsWith("rd_") && current.subreddits.isNotBlank()) {
-                    // Reddit items: more from the SAME subreddits (same theme).
-                    repo.browseReddit(
-                        current.subreddits, "top", "all", null, current.atleast, current.label
-                    ).items
+                if (wallpaper.id.startsWith("ai_")) {
+                    // AI items: generate more art in the same style.
+                    repo.browseAi(
+                        current.aiPrompts.ifEmpty { AiPrompts.art },
+                        Random.nextInt(0, 60), current.aiWidth, current.aiHeight, current.label
+                    )
                 } else {
-                    // Everything else: generate similar art with the AI.
-                    val prompts = if (wallpaper.id.startsWith("ai_")) {
-                        current.aiPrompts.ifEmpty { AiPrompts.art }
-                    } else {
-                        listOf(wallpaper.title.ifBlank { wallpaper.category })
-                    }
-                    repo.browseAi(prompts, Random.nextInt(0, 60), current.aiWidth, current.aiHeight, current.label)
+                    // Wallhaven items: real similar wallpapers by the image's tags.
+                    repo.findSimilar(wallpaper)
                 }
             }.getOrDefault(emptyList())
                 .filter { it.id != wallpaper.id }
@@ -297,33 +237,20 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         if (_loading.value || endReached) return
         _loading.value = true
         viewModelScope.launch {
-            when {
-                redditActive -> {
-                    val res = runCatching {
-                        repo.browseReddit(
-                            current.subreddits, current.redditSort, current.redditTime,
-                            redditAfter, current.atleast, current.label
-                        )
-                    }.getOrNull()
-                    // Reddit unreachable / empty first page -> switch to AI (or Wallhaven).
-                    if (res == null || (redditAfter == null && res.items.isEmpty())) {
-                        redditActive = false
-                        _loading.value = false
-                        loadMore()
-                        return@launch
-                    }
-                    redditAfter = res.nextAfter
-                    if (res.nextAfter == null) endReached = true
-                    appendItems(res.items)
-                }
-                else -> {
-                    // AI source (also the fallback when Reddit is unreachable).
-                    val prompts = current.aiPrompts.ifEmpty { AiPrompts.art }
-                    val items = repo.browseAi(prompts, page, current.aiWidth, current.aiHeight, current.label)
-                    appendItems(items)
-                    page++
-                    if (page > 40) endReached = true // safety cap; AI is otherwise endless
-                }
+            if (current.aiOnly) {
+                val prompts = current.aiPrompts.ifEmpty { AiPrompts.art }
+                val items = repo.browseAi(prompts, page, current.aiWidth, current.aiHeight, current.label)
+                appendItems(items)
+                page++
+                if (page > 40) endReached = true // safety cap; AI is otherwise endless
+            } else {
+                val items = runCatching {
+                    repo.browse(
+                        current.query, page + pageOffset, current.atleast,
+                        current.whCategories, current.whSorting
+                    )
+                }.getOrDefault(emptyList())
+                if (items.isEmpty()) endReached = true else { appendItems(items); page++ }
             }
             _loading.value = false
         }
