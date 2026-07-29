@@ -12,7 +12,6 @@ import com.fraan.kroma.data.model.WallpaperSource
 import com.fraan.kroma.data.remote.FirebaseWallpaperSource
 import com.fraan.kroma.data.remote.PollinationsApi
 import com.fraan.kroma.data.remote.RedditWallpaperApi
-import com.fraan.kroma.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -56,29 +55,6 @@ class WallpaperRepository(
 
     // ---- Browse ----
 
-    /**
-     * Wallhaven page for [query]. Used only as a last-ditch fallback now that Reddit
-     * and the AI generator are the primary sources (stock photo sites were dropped —
-     * they polluted the feed with random photos instead of wallpapers).
-     */
-    suspend fun browse(
-        query: String,
-        page: Int,
-        atleast: String = "1080x1920",
-        whCategories: String = "111",
-        useStock: Boolean = true, // kept for source compatibility; stock is no longer used
-        whSorting: String? = null
-    ): List<Wallpaper> {
-        val results = runCatching {
-            WallhavenApi.search(query, page, atleast, whCategories, whSorting)
-        }.getOrDefault(emptyList())
-        return when {
-            results.isNotEmpty() -> results
-            page == 1 && query.isBlank() && atleast == "1080x1920" -> SampleData.wallpapers
-            else -> emptyList()
-        }
-    }
-
     /** A page of AI-generated wallpapers at the requested resolution (infinite). */
     fun browseAi(
         prompts: List<String>,
@@ -109,44 +85,6 @@ class WallpaperRepository(
             w >= minW && h >= minH
         }
         return RedditWallpaperApi.Page(filtered, page.nextAfter)
-    }
-
-    /**
-     * Finds wallpapers genuinely similar to [wallpaper]:
-     * - Wallhaven items: read the image's REAL tags and search by them
-     *   (e.g. an anime girl returns more anime girls, a sports car more cars).
-     * - Stock items: search by the photo's descriptive title.
-     * - Fallback: the wallpaper's category.
-     */
-    suspend fun findSimilar(wallpaper: Wallpaper): List<Wallpaper> {
-        val query: String = when {
-            wallpaper.id.startsWith("wh_") -> {
-                val tags = WallhavenApi.tags(wallpaper.id.removePrefix("wh_"))
-                tags.firstOrNull() ?: wallpaper.category
-            }
-            wallpaper.title.isNotBlank() && wallpaper.title != "Wallpaper" ->
-                wallpaper.title.split(" ").take(3).joinToString(" ")
-            else -> wallpaper.category
-        }
-        val results = WallhavenApi.search(query, 1)
-        return if (results.isNotEmpty()) results else browse(wallpaper.category, 1)
-    }
-
-    /** Round-robin merge so the feed alternates between sources. */
-    private fun interleave(vararg lists: List<Wallpaper>): List<Wallpaper> {
-        val result = ArrayList<Wallpaper>(lists.sumOf { it.size })
-        val iterators = lists.map { it.iterator() }
-        var added = true
-        while (added) {
-            added = false
-            for (it in iterators) {
-                if (it.hasNext()) {
-                    result += it.next()
-                    added = true
-                }
-            }
-        }
-        return result
     }
 
     // ---- Favourites ----

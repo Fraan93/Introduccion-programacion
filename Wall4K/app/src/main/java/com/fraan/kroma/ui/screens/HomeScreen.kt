@@ -132,7 +132,7 @@ fun HomeScreen(
                     Icon(Icons.Outlined.Search, contentDescription = "Buscar")
                 }
             },
-            placeholder = { Text("Buscar: gato, coche, anime…") },
+            placeholder = { Text("Escríbelo y la IA lo crea: dragón, goku…") },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
             modifier = Modifier

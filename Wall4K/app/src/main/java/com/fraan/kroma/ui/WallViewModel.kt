@@ -223,8 +223,13 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         startFeed(category.copy(query = query))
     }
 
+    /** Search = generate wallpapers with the AI from whatever text the user types. */
     fun search(text: String) {
-        val cat = Category(text.ifBlank { "Búsqueda" }, text)
+        val cat = Category(
+            label = text.ifBlank { "Búsqueda" },
+            query = text,
+            aiPrompts = if (text.isBlank()) AiPrompts.art else listOf(text)
+        )
         _selectedCategory.value = cat
         startFeed(cat)
     }
@@ -259,18 +264,19 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         _related.value = emptyList()
         viewModelScope.launch {
             val results = runCatching {
-                when {
+                if (wallpaper.id.startsWith("rd_") && current.subreddits.isNotBlank()) {
                     // Reddit items: more from the SAME subreddits (same theme).
-                    wallpaper.id.startsWith("rd_") && current.subreddits.isNotBlank() ->
-                        repo.browseReddit(
-                            current.subreddits, "top", "all", null, current.atleast, current.label
-                        ).items
-                    // AI items: more freshly generated art in the same style.
-                    wallpaper.id.startsWith("ai_") -> {
-                        val prompts = current.aiPrompts.ifEmpty { AiPrompts.art }
-                        repo.browseAi(prompts, Random.nextInt(0, 60), current.aiWidth, current.aiHeight, current.label)
+                    repo.browseReddit(
+                        current.subreddits, "top", "all", null, current.atleast, current.label
+                    ).items
+                } else {
+                    // Everything else: generate similar art with the AI.
+                    val prompts = if (wallpaper.id.startsWith("ai_")) {
+                        current.aiPrompts.ifEmpty { AiPrompts.art }
+                    } else {
+                        listOf(wallpaper.title.ifBlank { wallpaper.category })
                     }
-                    else -> repo.findSimilar(wallpaper)
+                    repo.browseAi(prompts, Random.nextInt(0, 60), current.aiWidth, current.aiHeight, current.label)
                 }
             }.getOrDefault(emptyList())
                 .filter { it.id != wallpaper.id }
@@ -303,22 +309,13 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
                     if (res.nextAfter == null) endReached = true
                     appendItems(res.items)
                 }
-                current.aiPrompts.isNotEmpty() -> {
-                    val items = repo.browseAi(
-                        current.aiPrompts, page, current.aiWidth, current.aiHeight, current.label
-                    )
+                else -> {
+                    // AI source (also the fallback when Reddit is unreachable).
+                    val prompts = current.aiPrompts.ifEmpty { AiPrompts.art }
+                    val items = repo.browseAi(prompts, page, current.aiWidth, current.aiHeight, current.label)
                     appendItems(items)
                     page++
                     if (page > 40) endReached = true // safety cap; AI is otherwise endless
-                }
-                else -> {
-                    val items = runCatching {
-                        repo.browse(
-                            current.query, page + pageOffset, current.atleast,
-                            current.whCategories, current.useStock, current.whSorting
-                        )
-                    }.getOrDefault(emptyList())
-                    if (items.isEmpty()) endReached = true else { appendItems(items); page++ }
                 }
             }
             _loading.value = false

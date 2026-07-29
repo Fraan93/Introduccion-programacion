@@ -81,7 +81,7 @@ fun SettingsScreen(
 
         SectionTitle("Acerca de")
         AboutRow("Versión", BuildConfig.VERSION_NAME)
-        AboutRow("Catálogos", "Wallhaven · Pexels · Unsplash")
+        AboutRow("Fuentes", "Reddit · IA (Pollinations)")
         AboutRow("Contenido", "Solo apto para todos los públicos (SFW)")
     }
 }
