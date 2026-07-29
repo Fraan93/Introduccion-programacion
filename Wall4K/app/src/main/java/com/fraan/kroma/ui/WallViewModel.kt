@@ -37,8 +37,9 @@ data class Category(
     /** AI-generation prompts. Used as the category's source when there are no
      *  subreddits, or as the fallback when Reddit is unreachable. */
     val aiPrompts: List<String> = emptyList(),
-    val aiWidth: Int = 2160,
-    val aiHeight: Int = 3840
+    // Default AI size = Full-HD for fast generation; 4K/8K categories override it.
+    val aiWidth: Int = 1080,
+    val aiHeight: Int = 1920
 )
 
 /** Prompt pools for the AI generator (pollinations.ai). */
@@ -130,7 +131,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         // never random stock photos.
         Category("4K", "", aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840),
         Category("8K", "", aiPrompts = AiPrompts.art, aiWidth = 4320, aiHeight = 7680),
-        Category("IA", "", aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840),
+        Category("IA", "", aiPrompts = AiPrompts.art),
         Category(
             "Anime", "anime",
             whCategories = "010",
