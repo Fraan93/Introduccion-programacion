@@ -117,9 +117,9 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     // Categories with `subreddits` pull curated phone wallpapers from Reddit (the
     // Wallcraft look); `query`/`whCategories` act as a Wallhaven fallback if Reddit
     // is unreachable. Photography themes stay on Wallhaven + stock.
-    // Sources: Reddit (curated phone wallpapers, the Wallcraft look) is primary;
-    // the AI generator powers 4K/8K/IA and is the fallback if Reddit is unreachable.
-    // Wallhaven remains only as a deep fallback via browse().
+    // Speed first: browsing categories use Reddit (real CDN images that load in
+    // ~1-2s). AI generation (slower, on-the-fly) is reserved for the opt-in "IA"
+    // and "8K" categories and for search, where a short wait is expected.
     val categories: List<Category> = listOf(
         Category(
             "Popular", "",
@@ -127,9 +127,15 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
             redditSort = "hot",
             aiPrompts = AiPrompts.art
         ),
-        // 4K & 8K: AI-generated at true 4K/8K portrait resolution — always stunning,
-        // never random stock photos.
-        Category("4K", "", aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840),
+        // 4K: high-resolution REAL wallpapers from Reddit (fast); badge shows the
+        // true resolution. For guaranteed 4K/8K generated art, use "8K" or "IA".
+        Category(
+            "4K", "",
+            atleast = "1440x2560",
+            subreddits = "WQHD_Wallpaper+MobileWallpaper+iphonewallpapers",
+            aiPrompts = AiPrompts.art, aiWidth = 2160, aiHeight = 3840
+        ),
+        // 8K & IA: AI-generated (slower, on demand). 8K renders at true 8K portrait.
         Category("8K", "", aiPrompts = AiPrompts.art, aiWidth = 4320, aiHeight = 7680),
         Category("IA", "", aiPrompts = AiPrompts.art),
         Category(
