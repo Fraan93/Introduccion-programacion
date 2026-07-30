@@ -396,15 +396,9 @@ app.get("/ai", (req, res) => {
   res.json({ data, page, hasMore: true });
 });
 
-// Motor HD "Nano Banana" (Gemini) — función PRO. POST /generate
+// Motor HD "Nano Banana" (Gemini) — gratis para el usuario. POST /generate
 // body: { prompt, style, styleLabel, aspect: "phone"|"square", count, page }
 app.post("/generate", async (req, res) => {
-  if (!premiumGranted(req)) {
-    return res.status(402).json({
-      error: "premium_required",
-      message: "El motor HD (Nano Banana) es una función PRO. Suscríbete para usarlo.",
-    });
-  }
   if (!GEMINI_API_KEY) {
     return res.status(503).json({ error: "gemini_unavailable", message: "Falta GEMINI_API_KEY." });
   }
@@ -414,7 +408,8 @@ app.post("/generate", async (req, res) => {
   const style = (body.style || "").toString().trim();
   const styleLabel = (body.styleLabel || "IA").toString();
   const square = body.aspect === "square";
-  const count = Math.min(4, Math.max(1, parseInt(body.count, 10) || 2));
+  // Una imagen por defecto: una pulsación, un fondo.
+  const count = Math.min(4, Math.max(1, parseInt(body.count, 10) || 1));
   const orientation = square
     ? "square 1:1 composition"
     : "vertical 9:16 phone wallpaper composition, full screen";

@@ -132,7 +132,6 @@ private fun AppRoot() {
                     onAspect = { vm.setAspect(it) },
                     onEngine = { vm.setEngine(it) },
                     onGenerate = { vm.generate() },
-                    onGenerateMore = { vm.generateMore() },
                     onOpen = { navController.navigate(Screen.Detail.createRoute(it.id)) },
                     onOpenPremium = { navController.navigate(Screen.Paywall.route) },
                     onOpenSettings = { navController.navigate(Screen.Settings.route) }

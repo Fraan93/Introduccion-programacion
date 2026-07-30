@@ -77,21 +77,21 @@ class WallpaperRepository(
                 styledPrompt = styled,
                 fullW = aspect.width, fullH = aspect.height,
                 thumbW = aspect.thumbW, thumbH = aspect.thumbH,
-                model = "turbo", page = page, count = 6,
+                model = "turbo", page = page, count = 1,
                 author = "Kroma AI", category = style.label, titlePrompt = prompt
             )
             AiEngine.HD -> {
                 val nano = if (BuildConfig.KROMA_BACKEND_URL.isNotBlank()) {
                     NanoBananaApi.generate(
                         BuildConfig.KROMA_BACKEND_URL, BuildConfig.KROMA_PREMIUM_TOKEN,
-                        prompt, style, aspect, page, 4
+                        prompt, style, aspect, page, 1
                     )
                 } else null
                 nano ?: PollinationsApi.generate(
                     styledPrompt = styled,
                     fullW = aspect.hdWidth, fullH = aspect.hdHeight,
                     thumbW = aspect.thumbW, thumbH = aspect.thumbH,
-                    model = "flux", page = page, count = 4,
+                    model = "flux", page = page, count = 1,
                     author = "Kroma AI · HD", category = style.label, titlePrompt = prompt
                 )
             }

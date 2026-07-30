@@ -35,9 +35,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -64,21 +61,12 @@ fun CreateScreen(
     onAspect: (AspectRatio) -> Unit,
     onEngine: (AiEngine) -> Unit,
     onGenerate: () -> Unit,
-    onGenerateMore: () -> Unit,
     onOpen: (Wallpaper) -> Unit,
     onOpenPremium: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val gridState = rememberLazyStaggeredGridState()
-
-    // Infinite "generate more" when scrolling near the end.
-    LaunchedEffect(gridState, results.size) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .collect { lastVisible ->
-                if (results.isNotEmpty() && lastVisible >= results.size - 3) onGenerateMore()
-            }
-    }
 
     LazyVerticalStaggeredGrid(
         state = gridState,
@@ -255,12 +243,11 @@ private fun Controls(
         Label("Motor")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AiEngine.entries.forEach { e ->
-                val locked = e.premium && !isPremium
                 FilterChip(
                     selected = e == engine,
-                    onClick = { if (locked) onOpenPremium() else onEngine(e) },
+                    onClick = { onEngine(e) },
                     label = { Text(if (e == AiEngine.HD) "HD · Nano Banana" else e.label) },
-                    leadingIcon = if (e.premium) {
+                    leadingIcon = if (e == AiEngine.HD) {
                         { Icon(Icons.Filled.Star, null, Modifier.size(16.dp)) }
                     } else null,
                     colors = chipColors()
@@ -291,6 +278,13 @@ private fun Controls(
                 )
             }
         }
+
+        Text(
+            "Cada pulsación crea 1 fondo. Pulsa otra vez para otra versión.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
     }
 }
 

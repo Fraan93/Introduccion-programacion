@@ -117,45 +117,30 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private val _generating = MutableStateFlow(false)
     val generating: StateFlow<Boolean> = _generating.asStateFlow()
 
-    // Parameters of the feed currently on screen (for "generate more").
-    private var genPrompt = ""
-    private var genStyle = AiStyles.none
-    private var genAspect = AspectRatio.PHONE
-    private var genEngine = AiEngine.FAST
-    private var genPage = 1
+    // Increments on every press so each generation gets a fresh seed (a new image).
+    private var genCounter = 0
 
-    /** Starts a fresh generation from the current controls. */
+    /**
+     * Creates exactly ONE image from the current controls and adds it to the top of
+     * the results. Press again to create another one — one press, one wallpaper.
+     */
     fun generate() {
-        genPrompt = _prompt.value
-        genStyle = _style.value
-        genAspect = _aspect.value
-        genEngine = _engine.value
-        genPage = 1
-        _generated.value = emptyList()
-        runGeneration()
-    }
-
-    /** Fills the prompt from a quick idea and generates immediately (Explore/chips). */
-    fun generateFromIdea(idea: String) {
-        _prompt.value = idea
-        _style.value = AiStyles.none
-        generate()
-    }
-
-    /** Appends more variations of the current generation. */
-    fun generateMore() {
-        if (_generating.value || _generated.value.isEmpty()) return
-        genPage++
-        runGeneration()
-    }
-
-    private fun runGeneration() {
+        if (_generating.value) return
+        val p = _prompt.value
+        val s = _style.value
+        val a = _aspect.value
+        val e = _engine.value
+        genCounter++
+        val nonce = genCounter
         _generating.value = true
         viewModelScope.launch {
-            val items = runCatching {
-                repo.generate(genPrompt, genStyle, genAspect, genEngine, genPage)
-            }.getOrDefault(emptyList())
-            append(_generated, items)
+            val one = runCatching { repo.generate(p, s, a, e, nonce) }
+                .getOrDefault(emptyList())
+                .firstOrNull()
+            if (one != null) {
+                cache[one.id] = one
+                _generated.value = listOf(one) + _generated.value.filterNot { it.id == one.id }
+            }
             _generating.value = false
         }
     }
