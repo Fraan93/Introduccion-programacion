@@ -7,11 +7,12 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.fraan.kroma.BuildConfig
 import com.fraan.kroma.data.model.Wallpaper
 import com.fraan.kroma.data.model.WallpaperSource
 import com.fraan.kroma.data.remote.FirebaseWallpaperSource
+import com.fraan.kroma.data.remote.NanoBananaApi
 import com.fraan.kroma.data.remote.PollinationsApi
-import com.fraan.kroma.data.remote.WallhavenApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -26,12 +27,12 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 /**
  * Single source of truth.
  *
- *  - **Browse catalog**: paged, high-resolution wallpapers fetched live from the
- *    wallhaven.cc API ([browse]); falls back to the small bundled [SampleData]
- *    only if the network is unavailable on the first page.
- *  - **Uploads**: shared via Firebase when configured, else stored on-device.
+ *  - **Generation**: the app creates wallpapers with AI from the user's prompt
+ *    ([generate]) — free `turbo` or the PRO HD engine — plus a ready-made showcase
+ *    feed ([exploreFeed]) and per-image variations ([variationsOf]).
  *  - **Favourites**: the full wallpaper is persisted (so it displays even when the
  *    original page is no longer in memory).
+ *  - **Uploads**: kept for optional community sharing via Firebase when configured.
  */
 class WallpaperRepository(
     private val appContext: Context,
@@ -53,42 +54,72 @@ class WallpaperRepository(
         raw?.let { runCatching { json.decodeFromString<List<Wallpaper>>(it) }.getOrDefault(emptyList()) }
             ?: emptyList()
 
-    // ---- Browse ----
+    // ---- AI generation (the heart of the app) ----
 
     /**
-     * Reliable Wallhaven page for [query]. Primary source: always responds and each
-     * category uses a distinct query so categories differ. Real CDN images that
-     * load fast.
+     * Generates a page of wallpapers from the user's [prompt] + [style].
+     *
+     *  - [AiEngine.FAST]: pollinations `turbo` — instant, free, several variations.
+     *  - [AiEngine.HD]: the PRO engine. If a Kroma backend is configured it uses
+     *    "Nano Banana" (Gemini 2.5 Flash Image); otherwise it falls back to the
+     *    pollinations `flux` model at a higher resolution so the option always works.
      */
-    suspend fun browse(
-        query: String,
-        page: Int,
-        atleast: String = "1080x1920",
-        whCategories: String = "111",
-        whSorting: String? = null
-    ): List<Wallpaper> = WallhavenApi.search(query, page, atleast, whCategories, whSorting)
-
-    /** A page of AI-generated wallpapers at the requested resolution (infinite). */
-    fun browseAi(
-        prompts: List<String>,
-        page: Int,
-        width: Int,
-        height: Int,
-        category: String
-    ): List<Wallpaper> = PollinationsApi.generate(prompts, page, width, height, category)
-
-    /**
-     * Similar wallpapers: for Wallhaven items, read the image's REAL tags and search
-     * by them; for anything else, search by the title/category.
-     */
-    suspend fun findSimilar(wallpaper: Wallpaper): List<Wallpaper> {
-        val query = if (wallpaper.id.startsWith("wh_")) {
-            WallhavenApi.tags(wallpaper.id.removePrefix("wh_")).firstOrNull() ?: wallpaper.category
-        } else {
-            wallpaper.title.split(" ").take(3).joinToString(" ").ifBlank { wallpaper.category }
+    suspend fun generate(
+        prompt: String,
+        style: AiStyle,
+        aspect: AspectRatio,
+        engine: AiEngine,
+        page: Int
+    ): List<Wallpaper> = withContext(Dispatchers.IO) {
+        val styled = AiStyles.buildPrompt(prompt, style)
+        when (engine) {
+            AiEngine.FAST -> PollinationsApi.generate(
+                styledPrompt = styled,
+                fullW = aspect.width, fullH = aspect.height,
+                thumbW = aspect.thumbW, thumbH = aspect.thumbH,
+                model = "turbo", page = page, count = 6,
+                author = "Kroma AI", category = style.label, titlePrompt = prompt
+            )
+            AiEngine.HD -> {
+                val nano = if (BuildConfig.KROMA_BACKEND_URL.isNotBlank()) {
+                    NanoBananaApi.generate(
+                        BuildConfig.KROMA_BACKEND_URL, BuildConfig.KROMA_PREMIUM_TOKEN,
+                        prompt, style, aspect, page, 4
+                    )
+                } else null
+                nano ?: PollinationsApi.generate(
+                    styledPrompt = styled,
+                    fullW = aspect.hdWidth, fullH = aspect.hdHeight,
+                    thumbW = aspect.thumbW, thumbH = aspect.thumbH,
+                    model = "flux", page = page, count = 4,
+                    author = "Kroma AI · HD", category = style.label, titlePrompt = prompt
+                )
+            }
         }
-        return WallhavenApi.search(query, 1)
     }
+
+    /** Ready-made showcase feed for the Explore tab (free, fast). */
+    suspend fun exploreFeed(prompts: List<String>, page: Int): List<Wallpaper> =
+        withContext(Dispatchers.IO) {
+            val prompt = prompts[page % prompts.size]
+            PollinationsApi.generate(
+                styledPrompt = "$prompt, phone wallpaper, ultra detailed",
+                fullW = 1080, fullH = 1920, thumbW = 512, thumbH = 910,
+                model = "turbo", page = page, count = 8,
+                author = "Kroma AI", category = "Explorar", titlePrompt = prompt
+            )
+        }
+
+    /** More variations in the same theme as [wallpaper] (used on the detail screen). */
+    suspend fun variationsOf(wallpaper: Wallpaper, page: Int): List<Wallpaper> =
+        withContext(Dispatchers.IO) {
+            PollinationsApi.generate(
+                styledPrompt = "${wallpaper.title}, phone wallpaper, ultra detailed",
+                fullW = 1080, fullH = 1920, thumbW = 512, thumbH = 910,
+                model = "turbo", page = page, count = 8,
+                author = "Kroma AI", category = wallpaper.category, titlePrompt = wallpaper.title
+            )
+        }
 
     // ---- Favourites ----
 

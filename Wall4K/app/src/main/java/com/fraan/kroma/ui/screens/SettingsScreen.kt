@@ -81,7 +81,7 @@ fun SettingsScreen(
 
         SectionTitle("Acerca de")
         AboutRow("Versión", BuildConfig.VERSION_NAME)
-        AboutRow("Fuentes", "Reddit · IA (Pollinations)")
+        AboutRow("IA", "Pollinations (gratis) · Nano Banana (PRO)")
         AboutRow("Contenido", "Solo apto para todos los públicos (SFW)")
     }
 }

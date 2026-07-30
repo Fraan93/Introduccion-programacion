@@ -196,7 +196,7 @@ fun DetailScreen(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = listOf(wallpaper.resolution, "toca la imagen para vista previa")
+                text = listOf(wallpaper.author, wallpaper.resolution, "toca para vista previa")
                     .filter { it.isNotBlank() }
                     .joinToString("  ·  "),
                 color = Color.White.copy(alpha = 0.75f),
@@ -236,10 +236,10 @@ fun DetailScreen(
                 }
             }
 
-            // Genuinely similar wallpapers (searched by the image's real tags).
+            // More AI variations in the same theme.
             if (related.isNotEmpty()) {
                 Text(
-                    text = "Similares",
+                    text = "Más variaciones",
                     color = Color.White,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,

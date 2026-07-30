@@ -105,7 +105,7 @@ fun PaywallScreen(
                     text = if (isPremium) {
                         "Ya eres PRO (${activePlan?.title ?: ""}) — gracias por apoyar la app"
                     } else {
-                        "Desbloquea todo el catálogo"
+                        "Desbloquea la IA HD (Nano Banana)"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -116,10 +116,10 @@ fun PaywallScreen(
 
             // Benefits
             listOf(
-                "Categoría 8K exclusiva",
-                "Descargas en máxima calidad",
-                "Sin anuncios (cuando se activen)",
-                "Novedades antes que nadie"
+                "Motor HD “Nano Banana” (Gemini 2.5)",
+                "Máxima calidad y resolución",
+                "Generaciones ilimitadas, sin esperas",
+                "Sin marca de agua ni anuncios"
             ).forEach { benefit ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

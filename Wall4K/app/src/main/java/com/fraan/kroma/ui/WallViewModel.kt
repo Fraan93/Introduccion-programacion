@@ -1,10 +1,13 @@
 package com.fraan.kroma.ui
 
 import android.app.Application
-import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fraan.kroma.KromaApp
+import com.fraan.kroma.data.AiEngine
+import com.fraan.kroma.data.AiStyle
+import com.fraan.kroma.data.AiStyles
+import com.fraan.kroma.data.AspectRatio
 import com.fraan.kroma.data.PremiumPlan
 import com.fraan.kroma.data.ThemeMode
 import com.fraan.kroma.data.model.Wallpaper
@@ -16,27 +19,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/**
- * A browsable category. Wallhaven is the reliable source ([query] + [whCategories]
- * + [atleast] + [whSorting]); each category uses a distinct query so they differ.
- * When [aiOnly] is true the category is served by the AI generator instead
- * ([aiPrompts]) — reserved for the "IA" category and search.
- */
-data class Category(
-    val label: String,
-    val query: String,
-    val atleast: String = "1080x1920",
-    val whCategories: String = "111",
-    val whSorting: String? = null,
-    val aiOnly: Boolean = false,
-    val aiPrompts: List<String> = emptyList(),
-    val aiWidth: Int = 1080,
-    val aiHeight: Int = 1920
-)
-
-/** Prompt pools for the AI generator (pollinations.ai). */
-private object AiPrompts {
-    val art = listOf(
+/** Ready-made ideas shown in the Explore tab and as prompt suggestions. */
+object ExploreIdeas {
+    val prompts: List<String> = listOf(
         "cosmic nebula galaxy with bright stars",
         "a lush green planet seen from space, blue atmosphere",
         "fantasy mountain landscape at sunset, epic clouds",
@@ -51,20 +36,25 @@ private object AiPrompts {
         "surreal floating islands with waterfalls, dreamy sky",
         "minimalist 3d geometric shapes, soft studio lighting",
         "majestic waterfall in a tropical canyon, mist",
-        "galaxy reflected in a calm mountain lake at night"
-    )
-    val anime = listOf(
-        "anime scenery, makoto shinkai style, city at dusk, detailed",
-        "anime landscape, cherry blossoms and mountains, studio ghibli style",
-        "anime night sky with shooting stars over a quiet town",
-        "anime girl with umbrella in neon rainy street, cinematic",
-        "fantasy anime castle in the clouds, golden light"
-    )
-    val amoled = listOf(
+        "anime city at dusk, makoto shinkai style, detailed",
         "pure black background with a single glowing neon wave, amoled",
-        "pure black background minimal glowing geometric line art",
-        "black background with a small vibrant galaxy, amoled minimal",
-        "pure black wallpaper, subtle blue glowing particles"
+        "samurai warrior under a red moon, cinematic",
+        "dragon flying over a burning neon city",
+        "retro synthwave sunset with palm trees and grid",
+        "golden luxury marble and geometric pattern"
+    )
+
+    /** Short chips users can tap to fill the prompt box. */
+    val quick: List<String> = listOf(
+        "Galaxia y nebulosa",
+        "Ciudad cyberpunk",
+        "Dragón de fuego",
+        "Paisaje anime",
+        "Montañas al atardecer",
+        "Coche deportivo",
+        "Abstracto de colores",
+        "Bosque mágico",
+        "Samurái"
     )
 }
 
@@ -75,11 +65,7 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     private val premiumRepo = kromaApp.premiumRepository
     private val settingsRepo = kromaApp.settingsRepository
 
-    /**
-     * Every wallpaper that has passed through the UI, by id. Detail screens
-     * resolve wallpapers from here, so an item never "disappears" mid-navigation
-     * (e.g. while the similar-wallpapers list is being replaced).
-     */
+    /** Every wallpaper seen by the UI, by id, so detail navigation never loses one. */
     private val cache = HashMap<String, Wallpaper>()
 
     // ---- Settings ----
@@ -89,8 +75,6 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
     fun setTheme(mode: ThemeMode) {
         viewModelScope.launch { settingsRepo.setTheme(mode) }
     }
-
-    val isRemote: Boolean = repo.isRemote
 
     // ---- Premium ----
     val isPremium: StateFlow<Boolean> =
@@ -106,104 +90,98 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Wallhaven (reliable) powers every browsing category, each with a DISTINCT
-    // query so they truly differ. "IA" and search use the AI generator (fast turbo).
-    val categories: List<Category> = listOf(
-        Category("Popular", ""),
-        // 4K/8K: the highest-resolution portrait wallpapers Wallhaven has (real,
-        // fast). Badge shows the true resolution.
-        Category("4K", "", atleast = "1440x2560", whSorting = "toplist"),
-        Category("8K", "", atleast = "2160x3840", whSorting = "favorites"),
-        // IA: fully AI-generated art (opt-in; each image is created on the fly).
-        Category("IA", "", aiOnly = true, aiPrompts = AiPrompts.art),
-        Category("Anime", "anime", whCategories = "010"),
-        Category("AMOLED", "amoled", whSorting = "toplist"),
-        Category("Oscuro", "dark"),
-        Category("Coches", "car"),
-        Category("Espacio", "outer space galaxy"),
-        Category("Naturaleza", "nature landscape"),
-        Category("Ciudad", "city night"),
-        Category("Abstracto", "abstract"),
-        Category("Minimalista", "minimal"),
-        Category("Neón", "neon"),
-        Category("Anime chicas", "anime girl", whCategories = "010"),
-        Category("Videojuegos", "video game"),
-        Category("Code/Tech", "technology code"),
-        Category("Fantasía", "fantasy art")
-    )
+    // ---- Generation controls (kept in the VM so results survive navigation) ----
+    val styles: List<AiStyle> = AiStyles.all
 
-    // ---- Browse feed with infinite pagination ----
-    private val _browse = MutableStateFlow<List<Wallpaper>>(emptyList())
-    val browse: StateFlow<List<Wallpaper>> = _browse.asStateFlow()
+    private val _prompt = MutableStateFlow("")
+    val prompt: StateFlow<String> = _prompt.asStateFlow()
 
-    private val _loading = MutableStateFlow(false)
-    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+    private val _style = MutableStateFlow(AiStyles.none)
+    val style: StateFlow<AiStyle> = _style.asStateFlow()
 
-    private val _selectedCategory = MutableStateFlow(categories.first())
-    val selectedCategory: StateFlow<Category> = _selectedCategory.asStateFlow()
+    private val _aspect = MutableStateFlow(AspectRatio.PHONE)
+    val aspect: StateFlow<AspectRatio> = _aspect.asStateFlow()
 
-    // The feed currently being shown.
-    private var current: Category = categories.first()
-    private var page = 1
-    private var endReached = false
+    private val _engine = MutableStateFlow(AiEngine.FAST)
+    val engine: StateFlow<AiEngine> = _engine.asStateFlow()
 
-    /**
-     * Random page offset for the broad Popular feed so wallpapers rotate between
-     * visits. Not applied to searches, sorted feeds, or AI feeds.
-     */
-    private var pageOffset = 0
+    fun setPrompt(text: String) { _prompt.value = text }
+    fun setStyle(s: AiStyle) { _style.value = s }
+    fun setAspect(a: AspectRatio) { _aspect.value = a }
+    fun setEngine(e: AiEngine) { _engine.value = e }
 
-    // ---- Favourites & uploads ----
-    val favoriteWallpapers: StateFlow<List<Wallpaper>> =
-        repo.favoriteWallpapers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // ---- Generated results feed ----
+    private val _generated = MutableStateFlow<List<Wallpaper>>(emptyList())
+    val generated: StateFlow<List<Wallpaper>> = _generated.asStateFlow()
 
-    val favoriteIds: StateFlow<Set<String>> =
-        repo.favoriteIds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    private val _generating = MutableStateFlow(false)
+    val generating: StateFlow<Boolean> = _generating.asStateFlow()
 
-    val uploads: StateFlow<List<Wallpaper>> =
-        repo.uploads.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Parameters of the feed currently on screen (for "generate more").
+    private var genPrompt = ""
+    private var genStyle = AiStyles.none
+    private var genAspect = AspectRatio.PHONE
+    private var genEngine = AiEngine.FAST
+    private var genPage = 1
 
-    private val _uploading = MutableStateFlow(false)
-    val uploading: StateFlow<Boolean> = _uploading.asStateFlow()
-
-    init {
-        startFeed(categories.first())
+    /** Starts a fresh generation from the current controls. */
+    fun generate() {
+        genPrompt = _prompt.value
+        genStyle = _style.value
+        genAspect = _aspect.value
+        genEngine = _engine.value
+        genPage = 1
+        _generated.value = emptyList()
+        runGeneration()
     }
 
-    fun selectCategory(category: Category) {
-        _selectedCategory.value = category
-        startFeed(category)
+    /** Fills the prompt from a quick idea and generates immediately (Explore/chips). */
+    fun generateFromIdea(idea: String) {
+        _prompt.value = idea
+        _style.value = AiStyles.none
+        generate()
     }
 
-    /** Search = generate wallpapers with the AI from whatever text the user types. */
-    fun search(text: String) {
-        val cat = Category(
-            label = text.ifBlank { "Búsqueda" },
-            query = text,
-            aiOnly = true,
-            aiPrompts = if (text.isBlank()) AiPrompts.art else listOf(text)
-        )
-        _selectedCategory.value = cat
-        startFeed(cat)
+    /** Appends more variations of the current generation. */
+    fun generateMore() {
+        if (_generating.value || _generated.value.isEmpty()) return
+        genPage++
+        runGeneration()
     }
 
-    private fun startFeed(category: Category) {
-        current = category
-        // Only the broad Popular feed rotates its starting page.
-        pageOffset = if (!category.aiOnly && category.query.isBlank() &&
-            category.atleast == "1080x1920" && category.whSorting == null
-        ) {
-            Random.nextInt(0, 8)
-        } else {
-            0
+    private fun runGeneration() {
+        _generating.value = true
+        viewModelScope.launch {
+            val items = runCatching {
+                repo.generate(genPrompt, genStyle, genAspect, genEngine, genPage)
+            }.getOrDefault(emptyList())
+            append(_generated, items)
+            _generating.value = false
         }
-        page = 1
-        endReached = false
-        _browse.value = emptyList()
-        loadMore()
     }
 
-    // ---- Genuinely similar wallpapers (by real image tags) ----
+    // ---- Explore (ready-made AI showcase) ----
+    private val _explore = MutableStateFlow<List<Wallpaper>>(emptyList())
+    val explore: StateFlow<List<Wallpaper>> = _explore.asStateFlow()
+
+    private val _exploreLoading = MutableStateFlow(false)
+    val exploreLoading: StateFlow<Boolean> = _exploreLoading.asStateFlow()
+
+    private var explorePage = 0
+
+    fun loadMoreExplore() {
+        if (_exploreLoading.value) return
+        _exploreLoading.value = true
+        viewModelScope.launch {
+            val items = runCatching { repo.exploreFeed(ExploreIdeas.prompts, explorePage) }
+                .getOrDefault(emptyList())
+            explorePage++
+            append(_explore, items)
+            _exploreLoading.value = false
+        }
+    }
+
+    // ---- Detail: more variations ----
     private val _related = MutableStateFlow<List<Wallpaper>>(emptyList())
     val related: StateFlow<List<Wallpaper>> = _related.asStateFlow()
     private var relatedForId: String? = null
@@ -214,79 +192,36 @@ class WallViewModel(app: Application) : AndroidViewModel(app) {
         relatedForId = wallpaper.id
         _related.value = emptyList()
         viewModelScope.launch {
-            val results = runCatching {
-                if (wallpaper.id.startsWith("ai_")) {
-                    // AI items: generate more art in the same style.
-                    repo.browseAi(
-                        current.aiPrompts.ifEmpty { AiPrompts.art },
-                        Random.nextInt(0, 60), current.aiWidth, current.aiHeight, current.label
-                    )
-                } else {
-                    // Wallhaven items: real similar wallpapers by the image's tags.
-                    repo.findSimilar(wallpaper)
-                }
-            }.getOrDefault(emptyList())
+            val results = runCatching { repo.variationsOf(wallpaper, Random.nextInt(1, 80)) }
+                .getOrDefault(emptyList())
                 .filter { it.id != wallpaper.id }
-                .take(14)
+                .take(12)
             results.forEach { cache[it.id] = it }
             _related.value = results
         }
     }
 
-    fun loadMore() {
-        if (_loading.value || endReached) return
-        _loading.value = true
-        viewModelScope.launch {
-            if (current.aiOnly) {
-                val prompts = current.aiPrompts.ifEmpty { AiPrompts.art }
-                val items = repo.browseAi(prompts, page, current.aiWidth, current.aiHeight, current.label)
-                appendItems(items)
-                page++
-                if (page > 40) endReached = true // safety cap; AI is otherwise endless
-            } else {
-                val items = runCatching {
-                    repo.browse(
-                        current.query, page + pageOffset, current.atleast,
-                        current.whCategories, current.whSorting
-                    )
-                }.getOrDefault(emptyList())
-                if (items.isEmpty()) endReached = true else { appendItems(items); page++ }
-            }
-            _loading.value = false
-        }
-    }
+    // ---- Favourites ----
+    val favoriteWallpapers: StateFlow<List<Wallpaper>> =
+        repo.favoriteWallpapers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private fun appendItems(items: List<Wallpaper>) {
-        items.forEach { cache[it.id] = it }
-        val existing = _browse.value.mapTo(HashSet()) { it.id }
-        _browse.value = _browse.value + items.filter { it.id !in existing }
-    }
-
-    fun wallpaperById(id: String): Wallpaper? =
-        cache[id]
-            ?: favoriteWallpapers.value.firstOrNull { it.id == id }
-            ?: uploads.value.firstOrNull { it.id == id }
+    val favoriteIds: StateFlow<Set<String>> =
+        repo.favoriteIds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     fun toggleFavorite(wallpaper: Wallpaper) {
         viewModelScope.launch { repo.toggleFavorite(wallpaper) }
     }
 
-    fun addUpload(
-        source: Uri,
-        title: String,
-        author: String,
-        category: String,
-        onResult: (Boolean) -> Unit
-    ) {
-        viewModelScope.launch {
-            _uploading.value = true
-            val ok = runCatching { repo.addUpload(source, title, author, category) }.isSuccess
-            _uploading.value = false
-            onResult(ok)
-        }
+    fun wallpaperById(id: String): Wallpaper? =
+        cache[id] ?: favoriteWallpapers.value.firstOrNull { it.id == id }
+
+    init {
+        loadMoreExplore()
     }
 
-    fun deleteUpload(id: String) {
-        viewModelScope.launch { repo.deleteUpload(id) }
+    private fun append(flow: MutableStateFlow<List<Wallpaper>>, items: List<Wallpaper>) {
+        items.forEach { cache[it.id] = it }
+        val existing = flow.value.mapTo(HashSet()) { it.id }
+        flow.value = flow.value + items.filter { it.id !in existing }
     }
 }

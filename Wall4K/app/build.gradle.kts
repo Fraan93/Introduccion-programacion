@@ -19,19 +19,20 @@ android {
         applicationId = "com.fraan.kroma"
         minSdk = 24
         targetSdk = 35
-        versionCode = 17
-        versionName = "2.6"
+        versionCode = 18
+        versionName = "3.0"
         vectorDrawables { useSupportLibrary = true }
 
-        // API keys for the extra catalogs. Provided via environment variables
-        // (GitHub Secrets in CI) or -PPEXELS_API_KEY=... Gradle properties.
-        // With empty keys the app still works using the Wallhaven catalog only.
-        val pexelsKey = System.getenv("PEXELS_API_KEY")
-            ?: (project.findProperty("PEXELS_API_KEY") as? String ?: "")
-        val unsplashKey = System.getenv("UNSPLASH_ACCESS_KEY")
-            ?: (project.findProperty("UNSPLASH_ACCESS_KEY") as? String ?: "")
-        buildConfigField("String", "PEXELS_API_KEY", "\"$pexelsKey\"")
-        buildConfigField("String", "UNSPLASH_ACCESS_KEY", "\"$unsplashKey\"")
+        // Kroma backend (for the PRO "Nano Banana" HD engine). Optional: with an
+        // empty URL the HD engine falls back to the pollinations flux model, so the
+        // app works with no backend at all. Provided via environment variables
+        // (GitHub Secrets in CI) or -PKROMA_BACKEND_URL=... Gradle properties.
+        val backendUrl = System.getenv("KROMA_BACKEND_URL")
+            ?: (project.findProperty("KROMA_BACKEND_URL") as? String ?: "")
+        val premiumToken = System.getenv("KROMA_PREMIUM_TOKEN")
+            ?: (project.findProperty("KROMA_PREMIUM_TOKEN") as? String ?: "")
+        buildConfigField("String", "KROMA_BACKEND_URL", "\"$backendUrl\"")
+        buildConfigField("String", "KROMA_PREMIUM_TOKEN", "\"$premiumToken\"")
     }
 
     buildTypes {

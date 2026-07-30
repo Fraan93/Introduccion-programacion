@@ -12,12 +12,23 @@ Node.js + Express + MongoDB Atlas. Catálogo masivo de fondos (imágenes) y **v�
 ## Endpoints
 | Método | Ruta | Descripción |
 |---|---|---|
+| POST | `/generate` | **Motor HD "Nano Banana"** (Gemini 2.5 Flash Image) — **PRO** (402 sin premium). |
+| GET | `/img/:id` | Sirve una imagen generada por el motor HD. |
 | GET | `/wallpapers?category=&type=image\|video&page=&limit=` | Catálogo paginado. |
 | GET | `/wallpapers?type=video` | Live Wallpapers (vídeos verticales). |
 | GET | `/categories` | Lista de categorías. |
-| GET | `/ai?prompt=&page=` | **Pestaña IA** (siempre funciona, gratis). |
-| GET | `/search?q=&page=` | **Buscador — de pago** (402 sin premium). |
+| GET | `/ai?prompt=&page=` | Pestaña IA gratis (pollinations). |
+| GET | `/search?q=&page=` | Buscador — de pago (402 sin premium). |
 | POST | `/ingest?secret=...&pages=2` | Recargar catálogo desde las APIs. |
+
+## Motor HD "Nano Banana" (Gemini)
+- `POST /generate` con cabecera `x-premium-token: <PREMIUM_TOKEN>` y cuerpo JSON:
+  `{ "prompt": "...", "style": "...", "styleLabel": "Realista", "aspect": "phone", "count": 2 }`.
+- Usa `GEMINI_API_KEY` (Google AI Studio) con el modelo `gemini-2.5-flash-image`.
+- Devuelve `{ "items": [{ "id", "url", "thumbUrl", "resolution" }] }`; las imágenes se
+  sirven en `/img/:id`. Sin `GEMINI_API_KEY` responde 503 y la app usa un respaldo.
+- En la app, configura los GitHub Secrets `KROMA_BACKEND_URL` (URL de Render) y
+  `KROMA_PREMIUM_TOKEN` (igual que `PREMIUM_TOKEN`).
 
 ## Premium / suscripción
 - ~25% de los fondos se marcan `premium` (configurable con `PREMIUM_RATE`).

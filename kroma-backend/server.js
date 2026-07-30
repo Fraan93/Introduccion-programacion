@@ -26,6 +26,9 @@ const {
   INGEST_SECRET = "changeme",
   PREMIUM_TOKEN = "kroma-premium",
   PREMIUM_RATE = "0.25", // proporción de fondos marcados como premium
+  GEMINI_API_KEY, // motor HD "Nano Banana" (Gemini 2.5 Flash Image)
+  GEMINI_MODEL = "gemini-2.5-flash-image",
+  PUBLIC_BASE_URL = "", // p.ej. https://kroma.onrender.com (para servir /img)
 } = process.env;
 
 // ---------------------------------------------------------------------------
@@ -61,6 +64,56 @@ async function getJson(url, headers = {}) {
 }
 
 const premiumRoll = () => Math.random() < (parseFloat(PREMIUM_RATE) || 0.25);
+
+// ---------------------------------------------------------------------------
+// Motor HD "Nano Banana" (Gemini 2.5 Flash Image)
+// ---------------------------------------------------------------------------
+// Las imágenes generadas se guardan en memoria y se sirven en /img/:id.
+// Almacén sencillo con expulsión de las más antiguas (Render no persiste disco).
+const generatedImages = new Map(); // id -> { buf: Buffer, mime, ts }
+const MAX_GENERATED = 400;
+
+function storeImage(buf, mime) {
+  const id = `nb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  generatedImages.set(id, { buf, mime, ts: Date.now() });
+  while (generatedImages.size > MAX_GENERATED) {
+    const oldest = generatedImages.keys().next().value;
+    generatedImages.delete(oldest);
+  }
+  return id;
+}
+
+// Una llamada a Gemini => una imagen (PNG/JPEG en base64 inline).
+async function geminiImage(prompt) {
+  if (!GEMINI_API_KEY) return null;
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ["IMAGE"] },
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  const parts =
+    (data.candidates && data.candidates[0] && data.candidates[0].content &&
+      data.candidates[0].content.parts) || [];
+  const img = parts.find((p) => p.inlineData && p.inlineData.data);
+  if (!img) return null;
+  return {
+    buf: Buffer.from(img.inlineData.data, "base64"),
+    mime: img.inlineData.mimeType || "image/png",
+  };
+}
+
+function publicBase(req) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL.replace(/\/+$/, "");
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  return `${proto}://${req.get("host")}`;
+}
 
 // ---------------------------------------------------------------------------
 // Proveedores externos (APIs reales)
@@ -268,7 +321,7 @@ function present(w, granted) {
 }
 
 app.get("/", (req, res) =>
-  res.json({ name: "Kroma backend", status: "ok", endpoints: ["/wallpapers", "/ai", "/search", "/categories", "/ingest"] })
+  res.json({ name: "Kroma backend", status: "ok", endpoints: ["/generate", "/img/:id", "/wallpapers", "/ai", "/search", "/categories", "/ingest"] })
 );
 
 app.get("/health", (req, res) => res.json({ ok: true }));
@@ -341,6 +394,71 @@ app.get("/ai", (req, res) => {
     };
   });
   res.json({ data, page, hasMore: true });
+});
+
+// Motor HD "Nano Banana" (Gemini) — función PRO. POST /generate
+// body: { prompt, style, styleLabel, aspect: "phone"|"square", count, page }
+app.post("/generate", async (req, res) => {
+  if (!premiumGranted(req)) {
+    return res.status(402).json({
+      error: "premium_required",
+      message: "El motor HD (Nano Banana) es una función PRO. Suscríbete para usarlo.",
+    });
+  }
+  if (!GEMINI_API_KEY) {
+    return res.status(503).json({ error: "gemini_unavailable", message: "Falta GEMINI_API_KEY." });
+  }
+
+  const body = req.body || {};
+  const userPrompt = (body.prompt || "beautiful abstract wallpaper").toString().trim();
+  const style = (body.style || "").toString().trim();
+  const styleLabel = (body.styleLabel || "IA").toString();
+  const square = body.aspect === "square";
+  const count = Math.min(4, Math.max(1, parseInt(body.count, 10) || 2));
+  const orientation = square
+    ? "square 1:1 composition"
+    : "vertical 9:16 phone wallpaper composition, full screen";
+  const finalPrompt =
+    [userPrompt, style, orientation, "high quality, ultra detailed, no text, no watermark"]
+      .filter(Boolean)
+      .join(", ");
+
+  try {
+    const settled = await Promise.allSettled(
+      Array.from({ length: count }, () => geminiImage(finalPrompt))
+    );
+    const base = publicBase(req);
+    const items = [];
+    for (const r of settled) {
+      if (r.status === "fulfilled" && r.value) {
+        const id = storeImage(r.value.buf, r.value.mime);
+        const url = `${base}/img/${id}`;
+        items.push({
+          id,
+          url,
+          thumbUrl: url,
+          prompt: userPrompt,
+          category: styleLabel,
+          resolution: square ? "1440x1440" : "1440x2560",
+        });
+      }
+    }
+    if (!items.length) {
+      return res.status(502).json({ error: "generation_failed", message: "Gemini no devolvió imágenes." });
+    }
+    res.json({ items });
+  } catch (e) {
+    res.status(500).json({ error: "generation_error", message: e.message });
+  }
+});
+
+// Sirve una imagen generada por el motor HD.
+app.get("/img/:id", (req, res) => {
+  const rec = generatedImages.get(req.params.id);
+  if (!rec) return res.status(404).send("not found");
+  res.set("Content-Type", rec.mime);
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(rec.buf);
 });
 
 // Buscador = función de pago (suscripción).
