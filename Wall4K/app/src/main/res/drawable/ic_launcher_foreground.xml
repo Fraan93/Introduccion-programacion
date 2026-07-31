@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Framed picture / mountains motif -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,34h48a4,4 0 0 1 4,4v32a4,4 0 0 1 -4,4H30a4,4 0 0 1 -4,-4V38a4,4 0 0 1 4,-4zM30,40v24l14,-14 8,8 12,-16 12,14V40z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,48m-4,0a4,4 0 1 0 8,0a4,4 0 1 0 -8,0" />
+</vector>

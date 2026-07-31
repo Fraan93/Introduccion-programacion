@@ -1,0 +1,89 @@
+name: Compilar APK (Kroma)
+
+# Se ejecuta al hacer push a estas ramas, en pull requests, a mano,
+# y al crear un tag v* (que además publica un Release con el APK).
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    tags:
+      - "v*"
+    paths:
+      - "Wall4K/**"
+      - ".github/workflows/build-apk.yml"
+  pull_request:
+    paths:
+      - "Wall4K/**"
+  workflow_dispatch: {}
+
+# Directorio del proyecto Android (está en una subcarpeta del repo).
+defaults:
+  run:
+    working-directory: Wall4K
+
+permissions:
+  contents: write   # necesario para publicar el Release al hacer un tag
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Dar permisos a gradlew
+        run: chmod +x ./gradlew
+
+      - name: Compilar APK de debug
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tee /tmp/build.log
+
+      - name: Mostrar errores de compilación
+        if: failure()
+        run: |
+          echo "================ ERRORES ================"
+          grep -nE "^e: |: error:| FAILED$|Unresolved|but got|expected|Type mismatch|None of the following" /tmp/build.log | head -80 || true
+
+      - name: Renombrar APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk Kroma-debug.apk
+
+      - name: Subir APK como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kroma-debug-apk
+          path: Wall4K/Kroma-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # Release fija con enlace de descarga directo. Se actualiza en cada push
+      # a la rama y también en lanzamientos manuales (Run workflow).
+      - name: Publicar/actualizar Release de descarga
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-latest
+          name: "Kroma - APK debug (más reciente)"
+          prerelease: true
+          files: Wall4K/Kroma-debug.apk
+
+      # Además, Release versionada cuando publiques un tag v*.
+      - name: Publicar Release versionada (tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Wall4K/Kroma-debug.apk
+          generate_release_notes: true
