@@ -81,7 +81,7 @@ fun SettingsScreen(
 
         SectionTitle("Acerca de")
         AboutRow("Versión", BuildConfig.VERSION_NAME)
-        AboutRow("IA", "Pollinations (gratis) · Nano Banana (PRO)")
+        AboutRow("Fuente", "Wallhaven (fondos reales 4K/FHD)")
         AboutRow("Contenido", "Solo apto para todos los públicos (SFW)")
     }
 }

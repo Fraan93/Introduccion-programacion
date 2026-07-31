@@ -1,8 +1,8 @@
 package com.fraan.kroma.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -21,7 +21,7 @@ enum class TopLevelDestination(
     val label: String,
     val icon: ImageVector
 ) {
-    CREATE("create", "Crear", Icons.Outlined.AutoAwesome),
-    EXPLORE("explore", "Explorar", Icons.Outlined.Explore),
+    HOME("home", "Explorar", Icons.Outlined.Home),
+    CATEGORIES("categories", "Categorías", Icons.Outlined.GridView),
     FAVORITES("favorites", "Favoritos", Icons.Outlined.Favorite)
 }

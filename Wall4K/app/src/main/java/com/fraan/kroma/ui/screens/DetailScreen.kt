@@ -236,10 +236,10 @@ fun DetailScreen(
                 }
             }
 
-            // More AI variations in the same theme.
+            // Genuinely similar wallpapers (searched by the image's real tags).
             if (related.isNotEmpty()) {
                 Text(
-                    text = "Más variaciones",
+                    text = "Similares",
                     color = Color.White,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,

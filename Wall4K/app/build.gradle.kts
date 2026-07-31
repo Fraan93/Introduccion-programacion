@@ -19,20 +19,9 @@ android {
         applicationId = "com.fraan.kroma"
         minSdk = 24
         targetSdk = 35
-        versionCode = 18
-        versionName = "3.0"
+        versionCode = 19
+        versionName = "3.2"
         vectorDrawables { useSupportLibrary = true }
-
-        // Kroma backend (for the PRO "Nano Banana" HD engine). Optional: with an
-        // empty URL the HD engine falls back to the pollinations flux model, so the
-        // app works with no backend at all. Provided via environment variables
-        // (GitHub Secrets in CI) or -PKROMA_BACKEND_URL=... Gradle properties.
-        val backendUrl = System.getenv("KROMA_BACKEND_URL")
-            ?: (project.findProperty("KROMA_BACKEND_URL") as? String ?: "")
-        val premiumToken = System.getenv("KROMA_PREMIUM_TOKEN")
-            ?: (project.findProperty("KROMA_PREMIUM_TOKEN") as? String ?: "")
-        buildConfigField("String", "KROMA_BACKEND_URL", "\"$backendUrl\"")
-        buildConfigField("String", "KROMA_PREMIUM_TOKEN", "\"$premiumToken\"")
     }
 
     buildTypes {

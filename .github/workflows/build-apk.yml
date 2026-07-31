@@ -48,12 +48,6 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Compilar APK de debug
-        env:
-          # Opcional: backend para el motor HD "Nano Banana" (Gemini). Sin esto,
-          # el motor HD usa pollinations flux y la app funciona igual.
-          # Configúralas en: Settings -> Secrets and variables -> Actions.
-          KROMA_BACKEND_URL: ${{ secrets.KROMA_BACKEND_URL }}
-          KROMA_PREMIUM_TOKEN: ${{ secrets.KROMA_PREMIUM_TOKEN }}
         run: |
           set -o pipefail
           ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tee /tmp/build.log

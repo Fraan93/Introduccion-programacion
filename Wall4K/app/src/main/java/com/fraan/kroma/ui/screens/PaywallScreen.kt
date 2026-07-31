@@ -105,7 +105,7 @@ fun PaywallScreen(
                     text = if (isPremium) {
                         "Ya eres PRO (${activePlan?.title ?: ""}) — gracias por apoyar la app"
                     } else {
-                        "Apoya la app y consigue extras"
+                        "Descarga en 4K/8K sin límites"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -116,9 +116,9 @@ fun PaywallScreen(
 
             // Benefits
             listOf(
-                "Generación con IA gratis e ilimitada",
+                "Descargas en 4K y 8K sin marca de agua",
+                "Todas las categorías desbloqueadas",
                 "Sin anuncios (cuando se activen)",
-                "Insignia PRO y apoyo al desarrollo",
                 "Novedades antes que nadie"
             ).forEach { benefit ->
                 Row(
